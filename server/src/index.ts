@@ -11,25 +11,27 @@ import { billingRouter } from "./routes/billing.js";
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
 
-// Allowed frontend origins. Normalize (drop trailing slashes) on both sides so a
-// stray "/" in CORS_ORIGIN doesn't silently block the real Vercel origin.
+// This API serves public data and authenticates with Bearer tokens in the
+// Authorization header (no cookies), so allowing any origin is safe — a third
+// party site can't ride a user's session. This also avoids CORS_ORIGIN mismatch
+// headaches on deploy. To restrict, set CORS_ORIGIN to a comma-separated list.
 const norm = (s: string) => s.trim().replace(/\/+$/, "");
-const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
+const configured = (process.env.CORS_ORIGIN ?? "")
   .split(",")
   .map(norm)
-  .filter(Boolean);
-console.log("[cors] allowed origins:", allowedOrigins.join(", ") || "(none)");
+  .filter((s) => s && s !== "*");
 
-app.use(
-  cors({
-    origin(origin, cb) {
-      // Non-browser requests (curl, health checks) have no Origin — allow them.
-      if (!origin || allowedOrigins.includes(norm(origin))) return cb(null, true);
-      console.warn(`[cors] blocked origin: ${origin}`);
-      cb(null, false);
-    },
-  })
-);
+if (configured.length > 0) {
+  console.log("[cors] restricting to:", configured.join(", "));
+  app.use(
+    cors({
+      origin: (origin, cb) => cb(null, !origin || configured.includes(norm(origin))),
+    })
+  );
+} else {
+  console.log("[cors] allowing all origins");
+  app.use(cors()); // Access-Control-Allow-Origin: * (works for non-credentialed requests)
+}
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
