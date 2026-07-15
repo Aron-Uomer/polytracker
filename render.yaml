@@ -1,0 +1,37 @@
+# Render Blueprint for the PolyTrack API (Express server in server/).
+# In Render: New → Blueprint → point at this repo. Set the secret env vars
+# (marked sync:false) in the dashboard after the service is created.
+services:
+  - type: web
+    name: polytrack-api
+    runtime: node
+    rootDir: server
+    plan: free
+    # prisma generate = build the client; db push = create/update tables on the
+    # configured DATABASE_URL; then compile TS to dist/.
+    buildCommand: npm install && npx prisma generate && npx prisma db push && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NOWPAYMENTS_API_URL
+        value: https://api.nowpayments.io/v1
+      # --- set these in the Render dashboard (Environment tab) ---
+      - key: DATABASE_URL # your Neon connection string
+        sync: false
+      - key: AUTH_SECRET # a long random string
+        sync: false
+      - key: CORS_ORIGIN # your Vercel frontend URL, e.g. https://polytrack.vercel.app
+        sync: false
+      - key: APP_URL # same as CORS_ORIGIN (used for checkout redirects)
+        sync: false
+      - key: API_PUBLIC_URL # this service's public URL, e.g. https://polytrack-api.onrender.com
+        sync: false
+      - key: GOOGLE_CLIENT_ID # optional, for Google sign-in
+        sync: false
+      - key: NOWPAYMENTS_API_KEY # optional, for crypto billing
+        sync: false
+      - key: NOWPAYMENTS_IPN_SECRET # optional, for crypto billing
+        sync: false

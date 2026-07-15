@@ -1,0 +1,115 @@
+// Prisma schema for PolyTrack
+// Postgres is the production target. See server/.env.example for DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Cached, computed stats for a Polymarket trader keyed by their proxy wallet.
+/// We refetch from Polymarket only when this row is older than CACHE_TTL_SECONDS.
+model Trader {
+  address      String  @id // lowercased proxy wallet address
+  name         String?
+  pseudonym    String?
+  profileImage String?
+
+  portfolioValue Float   @default(0)
+  totalProfit    Float   @default(0) // canonical all-time profit (leaderboard API)
+  profitToday    Float   @default(0)
+  totalVolume    Float   @default(0)
+  totalTrades    Int     @default(0)
+  tradesCapped   Boolean @default(false)
+  openPositions  Int     @default(0)
+  resolvedCount  Int     @default(0)
+  wins           Int     @default(0)
+  losses         Int     @default(0)
+  winRate        Float? // null when no resolved positions yet
+
+  // Full computed payload (positions list etc.) so the frontend can render
+  // everything from cache without recomputing.
+  payload Json
+
+  // Background-indexer state: how far the wallet's trade history has been
+  // ingested into the Trade table. idxComplete = we've reached its first trade.
+  idxNewestTs  Int?
+  idxOldestTs  Int?
+  idxComplete  Boolean   @default(false)
+  idxUpdatedAt DateTime?
+
+  lastFetchedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  snapshots StatSnapshot[]
+}
+
+/// One on-chain activity event (trade / redeem) for a wallet. Filled
+/// incrementally by the indexer so stats can be computed exactly and instantly
+/// from the database instead of re-fetching Polymarket on every lookup.
+model Trade {
+  id          String @id // deterministic dedup key (see indexer.eventId)
+  address     String
+  txHash      String
+  timestamp   Int // unix seconds
+  type        String // TRADE | REDEEM | REWARD | ...
+  side        String // BUY | SELL | "" for non-trades
+  conditionId String
+  asset       String
+  size        Float
+  usdcSize    Float
+  price       Float
+  title       String
+  slug        String
+  icon        String
+
+  @@index([address, timestamp])
+  @@index([address, conditionId])
+}
+
+/// Point-in-time snapshot used for charting a trader's history over time.
+model StatSnapshot {
+  id             Int      @id @default(autoincrement())
+  traderAddress  String
+  portfolioValue Float
+  totalProfit    Float
+  winRate        Float?
+  totalTrades    Int
+  takenAt        DateTime @default(now())
+
+  trader Trader @relation(fields: [traderAddress], references: [address], onDelete: Cascade)
+
+  @@index([traderAddress, takenAt])
+}
+
+/// --- SaaS layer (wired for later: auth + saved wallets) ---
+
+model User {
+  id           String   @id @default(cuid()) // may also be an anonymous client id
+  email        String?  @unique
+  name         String?
+  passwordHash String? // null for anonymous (client-id) users
+  plan         String   @default("free") // "free" | "pro"
+
+  // Pro is granted for a period after each crypto payment (NOWPayments).
+  proExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  tracked TrackedWallet[]
+}
+
+model TrackedWallet {
+  id        String   @id @default(cuid())
+  userId    String
+  address   String
+  label     String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, address])
+}
