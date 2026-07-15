@@ -10,11 +10,26 @@ import { billingRouter } from "./routes/billing.js";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
-const CORS_ORIGIN = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
-  .split(",")
-  .map((s) => s.trim());
 
-app.use(cors({ origin: CORS_ORIGIN }));
+// Allowed frontend origins. Normalize (drop trailing slashes) on both sides so a
+// stray "/" in CORS_ORIGIN doesn't silently block the real Vercel origin.
+const norm = (s: string) => s.trim().replace(/\/+$/, "");
+const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
+  .split(",")
+  .map(norm)
+  .filter(Boolean);
+console.log("[cors] allowed origins:", allowedOrigins.join(", ") || "(none)");
+
+app.use(
+  cors({
+    origin(origin, cb) {
+      // Non-browser requests (curl, health checks) have no Origin — allow them.
+      if (!origin || allowedOrigins.includes(norm(origin))) return cb(null, true);
+      console.warn(`[cors] blocked origin: ${origin}`);
+      cb(null, false);
+    },
+  })
+);
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
