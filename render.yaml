@@ -7,9 +7,10 @@ services:
     runtime: node
     rootDir: server
     plan: free
-    # prisma generate = build the client; db push = create/update tables on the
-    # configured DATABASE_URL; then compile TS to dist/.
-    buildCommand: npm install && npx prisma generate && npx prisma db push && npm run build
+    # --include=dev is required: NODE_ENV=production makes npm skip devDependencies,
+    # but the build needs TypeScript + @types/* to compile. prisma generate builds
+    # the client; db push creates/updates tables; then tsc compiles to dist/.
+    buildCommand: npm install --include=dev && npx prisma generate && npx prisma db push && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
