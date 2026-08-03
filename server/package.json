@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "verify": "node scripts/verify.mjs",
     "simulate:ipn": "tsx scripts/simulate-ipn.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",

@@ -13,6 +13,16 @@ const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : nul
 export const googleEnabled = () => !!GOOGLE_CLIENT_ID;
 
 if (!process.env.AUTH_SECRET) {
+  // In production the fallback secret is public knowledge (it's in this repo),
+  // so every JWT would be forgeable by anyone. Refuse to start rather than serve
+  // a deployment whose sessions can be minted at will.
+  if (process.env.NODE_ENV === "production") {
+    console.error(
+      "[auth] FATAL: AUTH_SECRET is not set. Set it to a long random string " +
+        "(e.g. `openssl rand -hex 32`) — refusing to start in production with the public dev secret."
+    );
+    process.exit(1);
+  }
   console.warn("[auth] AUTH_SECRET not set — using an insecure dev secret. Set it in production.");
 }
 
@@ -55,13 +65,14 @@ export async function register(
   const passwordHash = await bcrypt.hash(password, 10);
 
   if (DB_ENABLED) {
+    // Any existing row for this email blocks registration — including one created
+    // by Google sign-in, which has no passwordHash. Letting registration "adopt"
+    // a password-less row would hand an account (and its plan) to anyone who
+    // knows the address of a Google user. Matches the in-memory path below.
     const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing?.passwordHash) throw new AuthError("An account with that email already exists.");
-    // Reuse a row if the email was somehow reserved without a password.
-    const user = await prisma.user.upsert({
-      where: { email },
-      create: { email, name: name ?? null, passwordHash, plan: "free" },
-      update: { passwordHash, name: name ?? undefined },
+    if (existing) throw new AuthError("An account with that email already exists.");
+    const user = await prisma.user.create({
+      data: { email, name: name ?? null, passwordHash, plan: "free" },
     });
     return { user: toAuthUser(user), token: sign(user.id) };
   }

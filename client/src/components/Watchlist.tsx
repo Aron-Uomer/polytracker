@@ -6,6 +6,8 @@ import { StarIcon, CrownIcon, PlusIcon, XIcon, UserIcon } from "./icons";
 
 interface Props {
   state: WatchlistState | null;
+  signedIn: boolean;
+  onSignIn: () => void;
   onAdd: (address: string) => Promise<AddWatchResult>;
   onRemove: (address: string) => void;
   onUpgrade: () => void;
@@ -14,7 +16,7 @@ interface Props {
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
-export function Watchlist({ state, onAdd, onRemove, onUpgrade, onSelect }: Props) {
+export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrade, onSelect }: Props) {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -36,6 +38,9 @@ export function Watchlist({ state, onAdd, onRemove, onUpgrade, onSelect }: Props
     const res = await onAdd(addr);
     setBusy(false);
     if (res.ok) setInput("");
+    // authRequired opens the sign-in modal upstream and re-tries afterwards, so
+    // don't shout an error at someone who's mid sign-up.
+    else if (res.authRequired) setError(null);
     else if (res.upgradeRequired) setError(res.error ?? "Plan limit reached.");
     else setError(res.error ?? "Couldn't add that wallet.");
   }
@@ -88,25 +93,51 @@ export function Watchlist({ state, onAdd, onRemove, onUpgrade, onSelect }: Props
         )}
       </div>
 
-      {/* Add bar */}
-      <form onSubmit={submit} className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="0x… wallet address to track"
-          spellCheck={false}
-          disabled={atLimit}
-          className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm outline-none transition focus:border-brand disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          disabled={busy || atLimit}
-          className="gradient-cta inline-flex items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50"
-        >
-          <PlusIcon className="h-4 w-4" /> {busy ? "Adding…" : "Track"}
-        </button>
-      </form>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {/* Add bar — tracking needs an account, so signed-out visitors get the
+          reason and a way in rather than a form that 401s. */}
+      {signedIn ? (
+        <>
+          <form onSubmit={submit} className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="0x… wallet address to track"
+              spellCheck={false}
+              disabled={atLimit}
+              className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm outline-none transition focus:border-brand disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={busy || atLimit}
+              className="gradient-cta inline-flex items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50"
+            >
+              <PlusIcon className="h-4 w-4" /> {busy ? "Adding…" : "Track"}
+            </button>
+          </form>
+          {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+        </>
+      ) : (
+        <div className="glass mt-6 flex flex-col items-center gap-4 rounded-2xl px-6 py-10 text-center">
+          <span className="grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-brand-light">
+            <StarIcon className="h-5 w-5" />
+          </span>
+          <div>
+            <h2 className="font-display text-lg font-semibold text-slate-100">
+              Sign in to track traders
+            </h2>
+            <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-slate-400">
+              Your roster is saved to your account, so it follows you to any device.
+              Free accounts track up to {state?.limit ?? 5} wallets.
+            </p>
+          </div>
+          <button
+            onClick={onSignIn}
+            className="gradient-cta inline-flex items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-semibold text-white shadow-glow transition hover:brightness-110"
+          >
+            Sign in or create an account
+          </button>
+        </div>
+      )}
 
       {/* Upgrade banner */}
       {isFree && (atLimit || error) && (

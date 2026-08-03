@@ -8,6 +8,7 @@ import {
 import type { LeaderboardMetric } from "../polymarket.js";
 import { verifyToken, getAuthUser } from "../auth.js";
 import { bearerToken } from "./auth.js";
+import { publicDetail } from "../errors.js";
 
 export const smartMoneyRouter = Router();
 
@@ -40,7 +41,7 @@ smartMoneyRouter.get("/", async (req, res) => {
     console.error("smart-money route error", err);
     res.status(502).json({
       error: "Failed to build the smart-money feed.",
-      detail: err instanceof Error ? err.message : String(err),
+      detail: publicDetail(err),
     });
   }
 });

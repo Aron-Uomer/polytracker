@@ -33,10 +33,24 @@ export interface PmValue {
   value: number;
 }
 
+// Never let a hung upstream connection pin a request forever — without this a
+// stalled Polymarket socket holds an Express handler (and a Render worker) open
+// indefinitely.
+const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS ?? 15000);
+
 async function getJson<T>(path: string, base = BASE): Promise<T> {
-  const res = await fetch(`${base}${path}`, {
-    headers: { Accept: "application/json" },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+      throw new Error(`Polymarket API ${path} timed out after ${FETCH_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  }
   if (!res.ok) {
     throw new Error(`Polymarket API ${path} -> ${res.status} ${res.statusText}`);
   }
@@ -159,6 +173,9 @@ export interface MarketAgg {
   net: number; // sells + redeems - buys (realized cash flow for the market)
   firstTradeTs?: number; // unix seconds of first trade in this market ("first buy")
   lastTradeTs?: number; // unix seconds of most recent trade in this market
+  /** True once we see a REDEEM — proof the market actually resolved on-chain.
+   *  A market exited purely by selling may still be open. */
+  redeemed: boolean;
 }
 
 export interface DailyPoint {
@@ -211,17 +228,28 @@ export async function fetchActivityPage(
   );
 }
 
+export interface ActivityAggregator {
+  /** Fold a chunk of events in. Safe to call repeatedly. */
+  push(events: Iterable<PmActivity>): void;
+  finish(opts: { capped: boolean }): ActivityStats;
+}
+
 /**
- * Aggregate a list of activity events into per-market roll-ups and headline
- * counters. Pure and source-agnostic: feed it events fetched live OR rows read
- * from the indexer's Trade table. Dedups internally. For the "recent buys"
- * metric to be meaningful, pass events newest-first.
+ * Streaming aggregator over activity events. Source-agnostic: feed it events
+ * fetched live OR rows read from the indexer's Trade table, in chunks, so a
+ * whale's whole history never has to sit in memory at once. Only the roll-ups
+ * (bounded by markets and calendar days) are retained.
+ *
+ * For the "recent buys" metric to be meaningful, push events newest-first.
+ *
+ * `dedupe` guards against the live feed returning an event twice across pages.
+ * Rows from the Trade table are already unique by primary key, so that path
+ * turns it off and avoids holding a key per event.
  */
-export function buildActivityStats(
-  events: PmActivity[],
-  opts: { capped: boolean }
-): ActivityStats {
-  const seen = new Set<string>();
+export function createActivityAggregator(
+  opts: { dedupe?: boolean } = {}
+): ActivityAggregator {
+  const seen = opts.dedupe === false ? null : new Set<string>();
   const markets = new Map<string, MarketAgg>();
   let tradeCount = 0;
   let newest: number | undefined;
@@ -241,69 +269,88 @@ export function buildActivityStats(
     return d;
   };
 
-  for (const a of events) {
-    const key = `${a.transactionHash}:${a.asset}:${a.type}:${a.side}:${a.size}:${a.timestamp}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+  function push(events: Iterable<PmActivity>) {
+    for (const a of events) {
+      if (seen) {
+        const key = `${a.transactionHash}:${a.asset}:${a.type}:${a.side}:${a.size}:${a.timestamp}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
 
-    const m =
-      markets.get(a.conditionId) ??
-      ({
-        conditionId: a.conditionId,
-        title: a.title ?? "",
-        slug: a.slug ?? "",
-        icon: a.icon ?? "",
-        bought: 0,
-        net: 0,
-      } satisfies MarketAgg);
-    const usdc = a.usdcSize ?? 0;
-    if (a.type === "TRADE") {
-      tradeCount++;
-      const day = dayFor(a.timestamp);
-      day.trades++;
-      day.volume += usdc;
-      if (a.side === "BUY") {
-        m.net -= usdc;
-        m.bought += usdc;
-        totalBought += usdc;
-        buyCount++;
-        entryWeightSum += (a.price ?? 0) * usdc;
-        if (recentBuySizes.length < 50) recentBuySizes.push(usdc);
-        day.netCash -= usdc;
-      } else {
+      const m =
+        markets.get(a.conditionId) ??
+        ({
+          conditionId: a.conditionId,
+          title: a.title ?? "",
+          slug: a.slug ?? "",
+          icon: a.icon ?? "",
+          bought: 0,
+          net: 0,
+          redeemed: false,
+        } satisfies MarketAgg);
+      const usdc = a.usdcSize ?? 0;
+      if (a.type === "TRADE") {
+        tradeCount++;
+        const day = dayFor(a.timestamp);
+        day.trades++;
+        day.volume += usdc;
+        if (a.side === "BUY") {
+          m.net -= usdc;
+          m.bought += usdc;
+          totalBought += usdc;
+          buyCount++;
+          entryWeightSum += (a.price ?? 0) * usdc;
+          if (recentBuySizes.length < 50) recentBuySizes.push(usdc);
+          day.netCash -= usdc;
+        } else {
+          m.net += usdc;
+          day.netCash += usdc;
+        }
+        if (m.firstTradeTs === undefined || a.timestamp < m.firstTradeTs) {
+          m.firstTradeTs = a.timestamp;
+        }
+        if (m.lastTradeTs === undefined || a.timestamp > m.lastTradeTs) {
+          m.lastTradeTs = a.timestamp;
+        }
+      } else if (a.type === "REDEEM" || a.type === "REWARD") {
         m.net += usdc;
-        day.netCash += usdc;
+        if (a.type === "REDEEM") m.redeemed = true; // the market settled on-chain
+        dayFor(a.timestamp).netCash += usdc;
       }
-      if (m.firstTradeTs === undefined || a.timestamp < m.firstTradeTs) {
-        m.firstTradeTs = a.timestamp;
-      }
-      if (m.lastTradeTs === undefined || a.timestamp > m.lastTradeTs) {
-        m.lastTradeTs = a.timestamp;
-      }
-    } else if (a.type === "REDEEM" || a.type === "REWARD") {
-      m.net += usdc;
-      dayFor(a.timestamp).netCash += usdc;
-    }
-    if (!m.title && a.title) m.title = a.title;
-    markets.set(a.conditionId, m);
+      if (!m.title && a.title) m.title = a.title;
+      markets.set(a.conditionId, m);
 
-    if (newest === undefined || a.timestamp > newest) newest = a.timestamp;
-    if (oldest === undefined || a.timestamp < oldest) oldest = a.timestamp;
+      if (newest === undefined || a.timestamp > newest) newest = a.timestamp;
+      if (oldest === undefined || a.timestamp < oldest) oldest = a.timestamp;
+    }
   }
 
   return {
-    tradeCount,
-    capped: opts.capped,
-    newest,
-    oldest,
-    markets,
-    totalBought,
-    buyCount,
-    entryWeightSum,
-    recentBuySizes,
-    activeDays: dayMap.size,
-    daily: [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    push,
+    finish: ({ capped }) => ({
+      tradeCount,
+      capped,
+      newest,
+      oldest,
+      markets,
+      totalBought,
+      buyCount,
+      entryWeightSum,
+      recentBuySizes,
+      activeDays: dayMap.size,
+      daily: [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    }),
   };
+}
+
+/** One-shot convenience wrapper around {@link createActivityAggregator}. */
+export function buildActivityStats(
+  events: PmActivity[],
+  opts: { capped: boolean }
+): ActivityStats {
+  const agg = createActivityAggregator();
+  agg.push(events);
+  return agg.finish(opts);
 }
 
 /**
@@ -312,7 +359,7 @@ export function buildActivityStats(
  * signals we stopped before the wallet's first trade.
  */
 export async function getActivityStats(user: string): Promise<ActivityStats> {
-  const events: PmActivity[] = [];
+  const agg = createActivityAggregator();
   let end: number | undefined;
   let capped = false;
   const startedAt = Date.now();
@@ -320,7 +367,7 @@ export async function getActivityStats(user: string): Promise<ActivityStats> {
   for (let i = 0; i < TRADES_MAX_PAGES; i++) {
     const page = await fetchActivityPage(user, end);
     if (page.length === 0) break;
-    events.push(...page);
+    agg.push(page); // folded in immediately — pages aren't retained
 
     const minTs = Math.min(...page.map((a) => a.timestamp));
     if (page.length < 500) break; // reached the wallet's first activity
@@ -333,5 +380,5 @@ export async function getActivityStats(user: string): Promise<ActivityStats> {
     }
   }
 
-  return buildActivityStats(events, { capped });
+  return agg.finish({ capped });
 }

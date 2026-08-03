@@ -15,7 +15,10 @@ export interface PositionView {
   percentPnl: number;
   realizedPnl: number;
   pnl: number;
-  resolved: boolean;
+  resolved: boolean; // "no longer open" — exitType says how it ended
+  /** "closed" = the wallet sold out before the market resolved. Absent on
+   *  payloads cached by an older server build. */
+  exitType?: "open" | "resolved" | "closed";
   endDate?: string;
   firstTradeAt: string | null;
   lastTradeAt: string | null;
@@ -38,7 +41,9 @@ export interface TraderStats {
   firstTradeAt: string | null;
   lastTradeAt: string | null;
   openPositionsCount: number;
-  resolvedCount: number;
+  resolvedCount: number; // finished trades: settled + closed
+  settledCount?: number;
+  closedCount?: number;
   wins: number;
   losses: number;
   winRate: number | null;
@@ -172,6 +177,7 @@ export interface WatchlistState {
 export interface AddWatchResult {
   ok: boolean;
   upgradeRequired?: boolean;
+  authRequired?: boolean; // not signed in — tracking needs an account
   error?: string;
   state?: WatchlistState;
 }

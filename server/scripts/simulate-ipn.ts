@@ -13,6 +13,10 @@ import crypto from "node:crypto";
 const [, , email, password, apiBaseArg] = process.argv;
 const API = apiBaseArg ?? "http://localhost:4000";
 const SECRET = process.env.NOWPAYMENTS_IPN_SECRET;
+// Fixed by default, so running this twice exercises the replay protection: the
+// second delivery is ignored and the plan doesn't gain another 30 days. Set
+// IPN_PAYMENT_ID to something new to simulate an actual second payment.
+const PAYMENT_ID = process.env.IPN_PAYMENT_ID ?? "5000000000";
 
 if (!email || !password) {
   console.error("Usage: npm run simulate:ipn -- <email> <password> [apiBase]");
@@ -54,7 +58,7 @@ async function main() {
   const payload = {
     payment_status: "finished",
     order_id: `${login.user.id}:${Date.now()}`,
-    payment_id: 5000000000,
+    payment_id: PAYMENT_ID,
     price_amount: 10,
     price_currency: "usd",
     pay_currency: "usdttrc20",
@@ -67,7 +71,7 @@ async function main() {
     headers: { "Content-Type": "application/json", "x-nowpayments-sig": sig },
     body,
   });
-  console.log(`✔ Sent signed 'finished' IPN → webhook responded ${hook.status}`);
+  console.log(`✔ Sent signed 'finished' IPN (payment_id ${PAYMENT_ID}) → webhook responded ${hook.status}`);
   if (!hook.ok) {
     console.error("   (400 = signature mismatch: the server's NOWPAYMENTS_IPN_SECRET must match this one — restart it.)");
     process.exit(1);
@@ -77,6 +81,10 @@ async function main() {
     await fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${login.token}` } })
   ).json()) as { user?: { plan: string; proExpiresAt: string | null } };
   console.log(`🎉 Plan is now: ${me.user?.plan}  (Pro until ${me.user?.proExpiresAt ?? "—"})`);
+  console.log(
+    "   Re-run with the same payment_id and the date should NOT move — that's the replay\n" +
+      "   protection. To simulate a genuine second payment: IPN_PAYMENT_ID=<new-id> npm run simulate:ipn -- …"
+  );
 }
 
 main().catch((e) => {

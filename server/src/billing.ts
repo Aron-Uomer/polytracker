@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { prisma, DB_ENABLED } from "./db.js";
-import { memEnsure } from "./memstore.js";
+import { memEnsure, memClaimPayment } from "./memstore.js";
 import { PRO_PRICE_USD } from "./plans.js";
 import type { AuthUser } from "./auth.js";
 
@@ -35,6 +35,15 @@ export function billingEnabled(): boolean {
   return !!API_KEY;
 }
 
+/**
+ * Whether `POST /api/me/plan` (flip the plan, no payment) is allowed. Only in
+ * local development with no payment provider configured — otherwise it's a
+ * one-request bypass of checkout.
+ */
+export function devPlanStubEnabled(): boolean {
+  return !billingEnabled() && process.env.NODE_ENV !== "production";
+}
+
 /** Extend a user's Pro pass by 30 days (from now, or from current expiry). */
 async function grantPro(userId: string) {
   const now = Date.now();
@@ -50,6 +59,29 @@ async function grantPro(userId: string) {
     const base = u.proExpiresAt && u.proExpiresAt > now ? u.proExpiresAt : now;
     u.plan = "pro";
     u.proExpiresAt = base + PRO_DAYS * 86400_000;
+  }
+}
+
+/**
+ * Claim a payment id, returning false if we've already granted for it. This is
+ * what makes the IPN safe to replay: NOWPayments can legitimately deliver the
+ * same callback more than once, and a captured payload could be resent
+ * deliberately — either way Pro must only be granted the first time.
+ */
+async function claimPayment(paymentId: string, userId: string, amountUsd: number): Promise<boolean> {
+  if (!DB_ENABLED) return memClaimPayment(paymentId);
+  try {
+    await prisma.payment.create({
+      data: { id: paymentId, userId, amountUsd, status: "finished" },
+    });
+    return true;
+  } catch (err) {
+    // P2002 = unique violation on the primary key, i.e. we've already granted
+    // for this payment. Anything else (table missing, DB down) must NOT be read
+    // as "already processed" — that would silently swallow a real payment. Throw
+    // so the webhook 500s and NOWPayments retries the callback.
+    if ((err as { code?: string }).code === "P2002") return false;
+    throw err;
   }
 }
 
@@ -70,6 +102,7 @@ export async function createInvoice(user: AuthUser): Promise<string> {
     method: "POST",
     headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
   });
   const data = (await res.json().catch(() => ({}))) as { invoice_url?: string; message?: string };
   if (!res.ok || !data.invoice_url) {
@@ -105,13 +138,48 @@ export function verifyIpn(payload: unknown, signature: string | undefined): bool
   }
 }
 
-/** Process a verified IPN: grant Pro once the payment is finished. */
-export async function handleIpn(payload: {
+export interface IpnPayload {
+  payment_id?: string | number;
   payment_status?: string;
   order_id?: string;
-}): Promise<void> {
-  const status = payload.payment_status;
-  if (status !== "finished") return; // ignore waiting/confirming/partial/failed
+  price_amount?: string | number;
+  price_currency?: string;
+}
+
+/**
+ * Process a verified IPN: grant Pro once, for a finished payment of the right
+ * amount. A valid signature proves NOWPayments sent it — not that it's the
+ * first time we've seen it, nor that the invoice was for our price — so both
+ * are checked here.
+ */
+export async function handleIpn(payload: IpnPayload): Promise<void> {
+  if (payload.payment_status !== "finished") return; // ignore waiting/confirming/partial/failed
+
   const userId = String(payload.order_id ?? "").split(":")[0];
-  if (userId) await grantPro(userId);
+  if (!userId) return;
+
+  const paymentId = String(payload.payment_id ?? "");
+  if (!paymentId) {
+    console.warn("[nowpayments] IPN without a payment_id — ignoring (can't dedupe it).");
+    return;
+  }
+
+  // The invoice we created was priced in USD at PRO_PRICE_USD; anything else
+  // isn't a payment for this product.
+  const amount = Number(payload.price_amount ?? 0);
+  const currency = String(payload.price_currency ?? "").toLowerCase();
+  if (currency !== "usd" || !(amount + 1e-6 >= PRO_PRICE_USD)) {
+    console.warn(
+      `[nowpayments] IPN ${paymentId} priced ${amount} ${currency || "?"}, expected ${PRO_PRICE_USD} usd — not granting.`
+    );
+    return;
+  }
+
+  if (!(await claimPayment(paymentId, userId, amount))) {
+    console.log(`[nowpayments] IPN ${paymentId} already processed — ignoring replay.`);
+    return;
+  }
+
+  await grantPro(userId);
+  console.log(`[nowpayments] granted ${PRO_DAYS} days of Pro to ${userId} (payment ${paymentId}).`);
 }

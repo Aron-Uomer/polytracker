@@ -102,6 +102,18 @@ model User {
   tracked TrackedWallet[]
 }
 
+/// One processed NOWPayments IPN. The payment id is the primary key, so a
+/// replayed callback fails to insert and can't grant a second Pro period.
+model Payment {
+  id        String   @id // NOWPayments payment_id
+  userId    String
+  amountUsd Float
+  status    String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
 model TrackedWallet {
   id        String   @id @default(cuid())
   userId    String

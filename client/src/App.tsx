@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchTrader,
   getWatchlist,
@@ -10,6 +10,7 @@ import {
   logout as apiLogout,
   getBillingConfig,
   startCheckout,
+  type BillingConfig,
 } from "./api";
 import type { AddWatchResult, AuthUser, TraderStats, WatchlistState } from "./types";
 import { AuthModal } from "./components/AuthModal";
@@ -83,19 +84,25 @@ export default function App() {
   const [watch, setWatch] = useState<WatchlistState | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
-  const [billing, setBilling] = useState({ enabled: false, price: 10 });
+  const [billing, setBilling] = useState<BillingConfig>({ enabled: false, price: 10 });
   const [flash, setFlash] = useState<string | null>(null);
   const { route, trader } = useHashRoute();
   const lastLookedUp = useRef<string | null>(null);
+  // Wallet the visitor tried to track while signed out — tracked for them as
+  // soon as they authenticate, so the click isn't silently thrown away.
+  const pendingTrack = useRef<string | null>(null);
 
-  const refreshWatch = () => getWatchlist().then(setWatch).catch(() => {});
+  const refreshWatch = () =>
+    getWatchlist()
+      .then(setWatch)
+      .catch((e) => console.warn("watchlist:", e instanceof Error ? e.message : e));
 
   useEffect(() => {
     refreshWatch();
     fetchMe().then(setUser).catch(() => {});
     getBillingConfig().then(setBilling).catch(() => {});
 
-    // Returning from Stripe Checkout (?checkout=success|cancel lives in the hash).
+    // Returning from the NOWPayments invoice (?checkout=success|cancel lives in the hash).
     const q = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
     const checkout = q.get("checkout");
     if (checkout === "success") {
@@ -115,10 +122,26 @@ export default function App() {
     return () => clearTimeout(t);
   }, [flash]);
 
-  function onAuthed(u: AuthUser) {
+  async function onAuthed(u: AuthUser) {
     setUser(u);
     setAuthOpen(false);
-    refreshWatch(); // now resolves to the account (anonymous list was merged in)
+
+    const pending = pendingTrack.current;
+    pendingTrack.current = null;
+    if (!pending) {
+      refreshWatch(); // now resolves to the account (anonymous list was merged in)
+      return;
+    }
+    // Finish what they were doing before we interrupted them to sign in.
+    const res = await addWatch(pending);
+    if (res.state) setWatch(res.state);
+    if (res.ok) setFlash("Signed in — now tracking that wallet.");
+    else setFlash(res.error ?? "Signed in, but that wallet couldn't be tracked.");
+  }
+
+  function closeAuth() {
+    pendingTrack.current = null; // they backed out; don't track on a later sign-in
+    setAuthOpen(false);
   }
   function signOut() {
     apiLogout();
@@ -162,12 +185,29 @@ export default function App() {
   const selectTrader = (addr: string) => goTo("home", addr.toLowerCase());
 
   async function addTrader(addr: string): Promise<AddWatchResult> {
+    // Tracking needs an account. Ask up front rather than round-tripping to a
+    // 401 the caller would have to translate anyway.
+    if (!user) {
+      pendingTrack.current = addr.toLowerCase();
+      setAuthOpen(true);
+      return { ok: false, authRequired: true, error: "Sign in to track a wallet." };
+    }
     const res = await addWatch(addr);
     if (res.state) setWatch(res.state);
+    // Token expired or was revoked server-side — same prompt, same recovery.
+    if (!res.ok && res.authRequired) {
+      pendingTrack.current = addr.toLowerCase();
+      setUser(null);
+      setAuthOpen(true);
+    }
     return res;
   }
   async function removeTrader(addr: string) {
-    setWatch(await removeWatch(addr));
+    try {
+      setWatch(await removeWatch(addr));
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : "Could not stop tracking that wallet.");
+    }
   }
   async function upgradePlan() {
     if (!user) {
@@ -176,15 +216,24 @@ export default function App() {
     }
     if (billing.enabled) {
       try {
-        window.location.href = await startCheckout(); // Stripe-hosted page
+        window.location.href = await startCheckout(); // NOWPayments hosted invoice
       } catch (e) {
         setFlash(e instanceof Error ? e.message : "Could not start checkout.");
       }
       return;
     }
-    // No payment provider configured – dev stub flips the plan directly.
-    setWatch(await setPlan("pro"));
-    setUser({ ...user, plan: "pro" });
+    if (!billing.devStub) {
+      // Deployed without a payment provider — the local plan shortcut is off.
+      setFlash("Upgrades aren't available yet — crypto checkout isn't configured on this deployment.");
+      return;
+    }
+    // Local development only: flip the plan directly so the higher cap is visible.
+    try {
+      setWatch(await setPlan("pro"));
+      setUser({ ...user, plan: "pro" });
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : "Could not change your plan.");
+    }
   }
   const isTracked = (addr: string) => !!watch?.entries.some((e) => e.address === addr.toLowerCase());
 
@@ -192,12 +241,13 @@ export default function App() {
   const showHero = onHome && !trader;
   const isPro = watch?.plan === "pro";
 
-  // Combined open + resolved, newest entry first – backs the default "All" tab.
-  const allPositions = stats
-    ? [...stats.openPositions, ...stats.resolvedPositions].sort(
-        (a, b) => (Date.parse(b.firstTradeAt ?? "") || 0) - (Date.parse(a.firstTradeAt ?? "") || 0)
-      )
-    : [];
+  // Backs the "All" tab. Ordering is PositionsTable's job — it owns the sort
+  // state for every tab, so there's one implementation instead of two. Memoised
+  // so the table isn't handed a fresh array (and forced to re-sort) every render.
+  const allPositions = useMemo(
+    () => (stats ? [...stats.openPositions, ...stats.resolvedPositions] : []),
+    [stats]
+  );
 
   return (
     <>
@@ -230,7 +280,7 @@ export default function App() {
         </div>
       </header>
 
-      {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onAuthed={onAuthed} />}
+      {authOpen && <AuthModal onClose={closeAuth} onAuthed={onAuthed} />}
 
       {flash && (
         <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 animate-fadeUp rounded-xl border border-white/10 bg-ink-800 px-4 py-2.5 text-sm text-slate-100 shadow-xl">
@@ -263,7 +313,15 @@ export default function App() {
             />
           ))}
         {route === "watchlist" && (
-          <Watchlist state={watch} onAdd={addTrader} onRemove={removeTrader} onUpgrade={upgradePlan} onSelect={selectTrader} />
+          <Watchlist
+            state={watch}
+            signedIn={!!user}
+            onSignIn={() => setAuthOpen(true)}
+            onAdd={addTrader}
+            onRemove={removeTrader}
+            onUpgrade={upgradePlan}
+            onSelect={selectTrader}
+          />
         )}
 
         {onHome && (
@@ -331,7 +389,7 @@ export default function App() {
 
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   <StatCard label="Total P&L" value={`${stats.totalProfit >= 0 ? "+" : ""}${usd(stats.totalProfit)}`} valueClass={pnlColor(stats.totalProfit)} sub={`Today ${stats.profitToday >= 0 ? "+" : ""}${usd(stats.profitToday)}`} />
-                  <StatCard label="Win Rate" value={pct(stats.winRate)} sub={`${stats.wins}W / ${stats.losses}L of ${stats.resolvedCount} resolved`} />
+                  <StatCard label="Win Rate" value={pct(stats.winRate)} sub={`${stats.wins}W / ${stats.losses}L of ${stats.resolvedCount} closed`} />
                   <StatCard label="Total Trades" value={`${stats.totalTrades.toLocaleString()}${stats.tradesCapped ? "+" : ""}`} sub={`${usd(stats.totalVolume)} vol · since ${tradeSince(stats.firstTradeAt)}`} />
                   <StatCard label="Portfolio Value" value={usd(stats.portfolioValue)} sub={`${stats.openPositionsCount} open positions`} />
                 </div>
@@ -351,8 +409,10 @@ export default function App() {
                     <TabButton active={tab === "open"} onClick={() => setTab("open")}>
                       Open ({stats.openPositionsCount})
                     </TabButton>
+                    {/* "Closed" covers both markets that resolved on-chain and
+                        ones the wallet sold out of early — see PositionView.exitType. */}
                     <TabButton active={tab === "resolved"} onClick={() => setTab("resolved")}>
-                      Resolved ({stats.resolvedCount})
+                      Closed ({stats.resolvedCount})
                     </TabButton>
                   </div>
                   <div className="px-3 pb-2">

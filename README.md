@@ -35,8 +35,13 @@ The server pulls from Polymarket's public APIs (no key required):
 It computes **win rate** itself as: resolved positions that ended in net profit ÷ all
 resolved positions (dust positions under 1 share are excluded so the rate is meaningful).
 
-Results are cached in Postgres for `CACHE_TTL_SECONDS` (default 5 min) and a snapshot is
-saved on every refresh so you can chart a trader's history later.
+Results are cached in Postgres for `CACHE_TTL_SECONDS` (default 5 min). A history snapshot is
+saved for charting too, but at most once per `SNAPSHOT_MIN_INTERVAL_SECONDS` (default 1 h) per
+wallet and pruned to the newest `SNAPSHOT_RETENTION` (default 500) — a trend line, not a log of
+every page view.
+
+Concurrent lookups of the same wallet are coalesced into one computation, so a burst of traffic
+on one trader doesn't multiply into a burst of Polymarket requests.
 
 > **No database needed to start.** If `DATABASE_URL` isn't set, the app runs "live-only":
 > it skips caching/history and just fetches fresh each time. Add a database when you want
@@ -73,7 +78,13 @@ npm run install:all
 The best DB for this SaaS is **PostgreSQL**. The easiest zero-cost host is
 [Neon](https://neon.tech) — it's serverless and plugs straight into Vercel:
 
-1. Create a free Neon project and copy its connection string.
+1. Create a free Neon project and copy its **pooled** connection string (the one whose host
+   contains `-pooler`). Prisma opens a connection per instance and serverless Postgres runs out
+   of direct connections quickly, so append `?pgbouncer=true&connection_limit=1` to it:
+   ```
+   postgresql://…-pooler.…neon.tech/db?sslmode=require&pgbouncer=true&connection_limit=1
+   ```
+   Schema changes (`prisma db push`) need the **direct** (non-pooled) string instead.
 2. Configure the server env:
    ```bash
    cp server/.env.example server/.env
@@ -144,7 +155,10 @@ next features:
 Email + password sign-in with JWT bearer tokens (`server/src/auth.ts`, routes under `/api/auth`).
 The token is stored in `localStorage` and sent as `Authorization: Bearer …`; requests are
 identified by the account when signed in, otherwise by the anonymous `x-client-id`. Signing in
-**merges** any wallets tracked anonymously into the account. Works with Postgres, or an
+**merges** any wallets tracked anonymously into the account — only from a genuinely anonymous
+identity (no email, no password), so passing someone else's user id as `x-client-id` can't pull
+their watchlist across. Reads never create a user row; an unrecognised `x-client-id` just reads
+as an empty free plan, and the row appears the first time you save something. Works with Postgres, or an
 in-memory store shared with the watchlist when no `DATABASE_URL` is set (dev only — resets on
 restart). Set a strong `AUTH_SECRET` in production. Passwords are hashed with bcrypt.
 
@@ -161,10 +175,20 @@ password). To enable:
    client ID, then restart. (There's a single `server/.env` for the whole project — Vite reads
    it via `envDir` and only exposes the `VITE_`-prefixed vars to the browser.)
 
+Sign-in, registration and Google auth share a 20-per-15-minutes-per-IP limit, so the login route
+can't be used to grind passwords.
+
 > Hardening for later: move the JWT into an httpOnly cookie, and add email verification /
 > password reset (needs an email provider).
 
 ## Plans & the watchlist
+
+**Tracking a wallet requires an account.** `POST /api/watchlist` returns `401
+{ authRequired: true }` when signed out — a roster tied to an anonymous browser id can't
+follow you to another device, so it isn't worth storing. Reading and removing still work by
+identity, so a watchlist built anonymously before this rule stays visible and merges into the
+account on first sign-in. In the UI, tracking while signed out opens the sign-in modal and the
+wallet is tracked automatically once you're in.
 
 Users can track multiple traders, capped by plan:
 
@@ -174,13 +198,20 @@ Users can track multiple traders, capped by plan:
 | Pro | 100 | $10 / month |
 
 Limits live in `server/src/plans.ts` (`PLAN_LIMITS`) and are enforced server-side when adding
-a wallet (`POST /api/watchlist` returns `403 { upgradeRequired: true }` past the cap).
+a wallet (`POST /api/watchlist` returns `403 { upgradeRequired: true }` past the cap). Pro-only
+features are enforced on the API too, not just hidden in the UI — `/api/smart-money` returns
+`403 { proRequired: true }` for anyone else.
 
 ### Billing (crypto via NOWPayments)
 
 Payments are crypto-only, handled by **NOWPayments** hosted invoices (`server/src/billing.ts`).
 It's **off by default** — with no keys set, "Upgrade to Pro" just flips the plan (the dev stub)
 so you can develop without an account. Add your NOWPayments keys to turn on real checkout.
+
+> The dev stub (`POST /api/me/plan`) grants Pro with no payment, so it is refused — `404` —
+> whenever NOWPayments is configured **and** always when `NODE_ENV=production`. It's a local
+> convenience, never a live endpoint. `GET /api/billing/config` reports `devStub` so the UI
+> knows which upgrade path is actually available.
 
 How it works: **Upgrade to Pro** creates a NOWPayments invoice → the buyer pays in crypto
 (USDC/USDT/BTC/…) on the hosted page → NOWPayments calls our **IPN webhook** → we grant **30
@@ -207,8 +238,12 @@ the tracked-wallet cap jumps to 100 (shown as "Pro until …").
 account's API key + IPN secret. No code changes.
 
 > The IPN webhook (`POST /api/billing/webhook`) is verified with HMAC-SHA512 over the sorted
-> JSON body using `NOWPAYMENTS_IPN_SECRET`. Needs a database in production so Pro periods survive
-> restarts; the in-memory fallback works for a single local session.
+> JSON body using `NOWPAYMENTS_IPN_SECRET`. A valid signature only proves NOWPayments sent it, so
+> the handler also checks the invoice was priced at `PRO_PRICE_USD` in USD, and records each
+> `payment_id` in the `Payment` table — a callback that's redelivered (or replayed by someone who
+> captured it) grants nothing the second time. Needs a database in production so Pro periods and
+> the processed-payment log survive restarts; the in-memory fallback works for a single local
+> session.
 
 Signed-out visitors are identified by an anonymous `x-client-id` (localStorage); signing in
 switches to the account and merges the anonymous watchlist. When crypto billing isn't
@@ -216,13 +251,38 @@ configured, **"Upgrade to Pro"** falls back to a dev stub (`POST /api/me/plan`) 
 plan so you can see the higher limit locally. The limit logic reads the effective `User.plan`
 (Pro only while `proExpiresAt` hasn't lapsed).
 
+## Rate limits
+
+Every route that fans out to Polymarket or writes to the database is capped per IP
+(`server/src/ratelimit.ts`) — one cheap request can otherwise amplify into dozens of upstream
+page fetches, and sign-in would be an unthrottled password oracle:
+
+| Route | Limit |
+| --- | --- |
+| `/api/trader` | 30 / min |
+| `/api/leaderboard`, `/api/watchlist`, `/api/me`, `/api/billing` | 60 / min |
+| `/api/smart-money` | 10 / min |
+| `/api/auth` | 20 / 15 min |
+| `/api/billing/checkout` | 10 / hour |
+| everything else | 300 / min |
+
+Over the limit returns `429` with `Retry-After`. `/api/health` is exempt so platform probes never
+trip it. The counters are in-process, which suits a single instance — running several means
+swapping the map in `ratelimit.ts` for Redis.
+
 ## Notes & caveats
 
 - **Win rate** is reconstructed from a wallet's full `/activity` history: per market we sum
-  `sells + redeems − buys`, and a closed/resolved market counts as a "win" if that net is
+  `sells + redeems − buys`, and a finished market counts as a "win" if that net is
   positive. (We can't rely on `/positions` alone — once a wallet *redeems* a resolved
   market it disappears from that endpoint, which is why a naive approach shows 0 resolved.)
   In practice this lands within ~0.1% of what trackers like polywallet show.
+- **"Closed" ≠ "resolved".** The denominator counts every *finished* trade, which includes
+  markets the wallet sold out of before they resolved — that's why the UI says "closed", not
+  "resolved". Each position carries an `exitType`: `resolved` when the market actually settled
+  on-chain (we saw a redeem, or it's redeemable/priced at 0 or 1) versus `closed` when the wallet
+  simply exited a market that may still be trading. `settledCount` / `closedCount` split the
+  total, and sold-out rows are marked "· sold" in the positions table.
 - **Portfolio value** is the open-positions value from Polymarket's `/value`. It does *not*
   include a wallet's idle USDC cash balance (that isn't exposed as a plain on-chain balance),
   so it can read a few % below trackers that add cash on top.

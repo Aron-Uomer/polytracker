@@ -102,9 +102,15 @@ export function logout() {
 }
 
 // --- Billing ---
-export async function getBillingConfig(): Promise<{ enabled: boolean; price: number }> {
+export interface BillingConfig {
+  enabled: boolean; // real crypto checkout is configured
+  price: number;
+  devStub?: boolean; // local-only "flip the plan" shortcut is available
+}
+
+export async function getBillingConfig(): Promise<BillingConfig> {
   const res = await fetch(`${API_BASE}/api/billing/config`);
-  if (!res.ok) return { enabled: false, price: 10 };
+  if (!res.ok) return { enabled: false, price: 10, devStub: false };
   return res.json();
 }
 
@@ -154,9 +160,17 @@ export async function fetchTraderSummary(address: string): Promise<TraderSummary
   return (await res.json()).summary;
 }
 
+/** Parse a watchlist response, turning an error body into a thrown error rather
+ *  than letting `{ error: … }` land in state where a WatchlistState is expected. */
+async function readState(res: Response, fallback: string): Promise<WatchlistState> {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? `${fallback} (status ${res.status})`);
+  return data as WatchlistState;
+}
+
 export async function getWatchlist(): Promise<WatchlistState> {
   const res = await fetch(`${API_BASE}/api/watchlist`, { headers: clientHeaders() });
-  return res.json();
+  return readState(res, "Could not load your watchlist");
 }
 
 export async function addWatch(address: string, label?: string): Promise<AddWatchResult> {
@@ -165,11 +179,12 @@ export async function addWatch(address: string, label?: string): Promise<AddWatc
     headers: jsonHeaders(),
     body: JSON.stringify({ address, label }),
   });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (res.ok) return { ok: true, state: data };
   return {
     ok: false,
     upgradeRequired: data.upgradeRequired,
+    authRequired: data.authRequired ?? res.status === 401,
     error: data.error,
     state: data.state,
   };
@@ -180,17 +195,18 @@ export async function removeWatch(address: string): Promise<WatchlistState> {
     method: "DELETE",
     headers: clientHeaders(),
   });
-  return res.json();
+  return readState(res, "Could not stop tracking that wallet");
 }
 
-/** Dev stub until billing exists: flip the current client's plan. */
+/** Local-dev only: flip the current client's plan. The server refuses this in
+ *  production and whenever crypto billing is configured. */
 export async function setPlan(plan: Plan): Promise<WatchlistState> {
   const res = await fetch(`${API_BASE}/api/me/plan`, {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify({ plan }),
   });
-  return res.json();
+  return readState(res, "Could not change your plan");
 }
 
 export async function fetchHistory(address: string): Promise<Snapshot[]> {

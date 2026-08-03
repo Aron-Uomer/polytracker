@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import {
-  buildActivityStats,
+  createActivityAggregator,
   fetchActivityPage,
   type ActivityStats,
   type PmActivity,
@@ -145,17 +145,39 @@ export async function indexWallet(
   };
 }
 
-/** Build the activity aggregation from indexed Trade rows (exact + instant). */
+/** How many Trade rows to hold in memory at once while aggregating. */
+const READ_BATCH = Number(process.env.INDEX_READ_BATCH ?? 5000);
+
+/**
+ * Build the activity aggregation from indexed Trade rows (exact + instant).
+ *
+ * Read in cursor-paged batches and folded into the aggregator as we go: a
+ * 50k-trade whale would otherwise materialise its entire history in memory on
+ * every cache miss. Rows are unique by primary key, so dedup is off.
+ */
 export async function getActivityStatsFromDb(
   prisma: PrismaClient,
   address: string,
   complete: boolean
 ): Promise<ActivityStats> {
-  const rows = await prisma.trade.findMany({
-    where: { address: address.toLowerCase() },
-    orderBy: { timestamp: "desc" },
-  });
-  const events = rows.map(rowToEvent);
+  const user = address.toLowerCase();
+  const agg = createActivityAggregator({ dedupe: false });
+
+  let cursor: string | undefined;
+  for (;;) {
+    const rows = await prisma.trade.findMany({
+      where: { address: user },
+      // id breaks ties so the cursor is stable when trades share a timestamp.
+      orderBy: [{ timestamp: "desc" }, { id: "desc" }],
+      take: READ_BATCH,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    if (rows.length === 0) break;
+    agg.push(rows.map(rowToEvent));
+    if (rows.length < READ_BATCH) break;
+    cursor = rows[rows.length - 1].id;
+  }
+
   // capped = history isn't fully indexed yet (whale mid-backfill).
-  return buildActivityStats(events, { capped: !complete });
+  return agg.finish({ capped: !complete });
 }

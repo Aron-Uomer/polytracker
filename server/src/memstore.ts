@@ -50,3 +50,15 @@ export function memGetByEmail(email: string): MemUser | undefined {
 export function memIndexEmail(u: MemUser) {
   if (u.email) byEmail.set(u.email, u);
 }
+
+// Processed payment ids, so a replayed IPN can't grant Pro twice. Like the rest
+// of this store it's single-process and resets on restart — production billing
+// needs a database (see README).
+const processedPayments = new Set<string>();
+
+/** Returns true the first time a payment id is seen, false on every replay. */
+export function memClaimPayment(paymentId: string): boolean {
+  if (processedPayments.has(paymentId)) return false;
+  processedPayments.add(paymentId);
+  return true;
+}

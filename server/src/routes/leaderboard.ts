@@ -4,6 +4,7 @@ import {
   type LeaderboardMetric,
   type LeaderboardWindow,
 } from "../polymarket.js";
+import { publicDetail } from "../errors.js";
 
 export const leaderboardRouter = Router();
 
@@ -26,7 +27,7 @@ leaderboardRouter.get("/", async (req, res) => {
     console.error("leaderboard route error", err);
     return res.status(502).json({
       error: "Failed to fetch the Polymarket leaderboard.",
-      detail: err instanceof Error ? err.message : String(err),
+      detail: publicDetail(err),
     });
   }
 });

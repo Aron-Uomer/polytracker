@@ -23,7 +23,16 @@ export interface PositionView {
   percentPnl: number;
   realizedPnl: number;
   pnl: number; // total P&L for the position: unrealized (cashPnl) + realized
-  resolved: boolean;
+  resolved: boolean; // "no longer an open position" — see exitType for how it ended
+  /**
+   * How the position ended:
+   *  - "open"     still held, market still trading
+   *  - "resolved" market settled on-chain (redeemable, priced at 0/1, or redeemed)
+   *  - "closed"   wallet sold out of its own accord; the market may still be open
+   * Win rate counts "resolved" and "closed" alike — both are finished trades with
+   * a realised P&L — but only "resolved" means the market itself is over.
+   */
+  exitType: "open" | "resolved" | "closed";
   endDate?: string;
   firstTradeAt: string | null; // ISO date the wallet first entered this market
   lastTradeAt: string | null; // ISO date of the wallet's most recent trade here
@@ -46,7 +55,9 @@ export interface TraderStats {
   firstTradeAt: string | null; // ISO date of oldest trade we reached
   lastTradeAt: string | null; // ISO date of newest trade
   openPositionsCount: number;
-  resolvedCount: number;
+  resolvedCount: number; // finished trades — settledCount + closedCount; drives win rate
+  settledCount: number; // of those, markets that actually resolved on-chain
+  closedCount: number; // of those, markets the wallet sold out of before resolution
   wins: number;
   losses: number;
   winRate: number | null; // 0..1, null if no resolved positions
@@ -94,6 +105,7 @@ function toView(p: PmPosition): PositionView {
     realizedPnl: p.realizedPnl,
     pnl: p.cashPnl + p.realizedPnl,
     resolved: isResolved(p),
+    exitType: isResolved(p) ? "resolved" : "open",
     endDate: p.endDate,
     firstTradeAt: null, // filled in from activity history
     lastTradeAt: null,
@@ -148,6 +160,9 @@ function marketToView(m: MarketAgg): PositionView {
     realizedPnl: m.net,
     pnl: m.net,
     resolved: true,
+    // A redeem proves the market settled; otherwise the wallet just sold out and
+    // the market may well still be trading.
+    exitType: m.redeemed ? "resolved" : "closed",
     endDate: undefined,
     firstTradeAt: isoOrNull(m.firstTradeTs),
     lastTradeAt: isoOrNull(m.lastTradeTs),
@@ -208,7 +223,9 @@ export async function computeTraderStats(
   }
   const resolved = [...resolvedHeld, ...exited];
 
-  // Win = a resolved market that ended in net profit.
+  // Win = a finished trade that ended in net profit.
+  const settledCount = resolved.filter((p) => p.exitType === "resolved").length;
+  const closedCount = resolved.length - settledCount;
   const wins = resolved.filter((p) => p.pnl > 0).length;
   const losses = resolved.length - wins;
   const winRate = resolved.length > 0 ? wins / resolved.length : null;
@@ -264,6 +281,8 @@ export async function computeTraderStats(
       : null,
     openPositionsCount: open.length,
     resolvedCount: resolved.length,
+    settledCount,
+    closedCount,
     wins,
     losses,
     winRate,
