@@ -1,11 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#7c3aed"/>
-      <stop offset="0.6" stop-color="#6366f1"/>
-      <stop offset="1" stop-color="#22d3ee"/>
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="8" fill="url(#g)"/>
-  <path d="M17 6 L9 18 H15 L14 26 L23 13 H17 L18 6 Z" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="PolyTrack">
+  <!-- The PT plate from the rail: enamel chassis, bone frame, bone lettering.
+       Letters are drawn as rects rather than <text> so the mark is identical
+       on every platform and stays crisp at 16px — a favicon cannot depend on
+       Archivo being installed. -->
+  <rect width="32" height="32" fill="#14150F"/>
+  <rect x="1" y="1" width="30" height="30" fill="none" stroke="#E8E3D6" stroke-width="2"/>
+
+  <g fill="#E8E3D6">
+    <!-- P -->
+    <rect x="6" y="10" width="3.4" height="13"/>
+    <rect x="6" y="10" width="7.6" height="3.4"/>
+    <rect x="10.2" y="10" width="3.4" height="6.6"/>
+    <rect x="6" y="13.2" width="7.6" height="3.4"/>
+    <!-- T -->
+    <rect x="15.8" y="10" width="10.2" height="3.4"/>
+    <rect x="19.2" y="10" width="3.4" height="13"/>
+  </g>
 </svg>
