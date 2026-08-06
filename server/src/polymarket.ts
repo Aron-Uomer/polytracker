@@ -129,18 +129,33 @@ export async function getValue(user: string): Promise<number> {
   return data[0]?.value ?? 0;
 }
 
-/** Fetch all positions (resolved + open), paging through results. */
+/**
+ * Fetch all positions (resolved + open).
+ *
+ * Unlike the activity feed — whose `end` cursor makes page N+1 depend on page
+ * N's contents — this endpoint is offset-based, so the pages are independent
+ * and can be fetched concurrently. Four at a time turns ten serial round trips
+ * into three parallel ones.
+ */
 export async function getPositions(user: string): Promise<PmPosition[]> {
   const all: PmPosition[] = [];
   const limit = 500;
-  for (let offset = 0; offset < 5000; offset += limit) {
+  const CONCURRENCY = 4;
+
+  for (let offset = 0; offset < 5000; offset += CONCURRENCY * limit) {
     // sizeThreshold=1 (the API default) excludes sub-1-share dust positions,
     // which otherwise flood the win-rate calc with thousands of tiny losses.
-    const page = await getJson<PmPosition[]>(
-      `/positions?user=${user}&limit=${limit}&offset=${offset}&sizeThreshold=1`
+    const batch = await Promise.all(
+      Array.from({ length: CONCURRENCY }, (_, k) =>
+        getJson<PmPosition[]>(
+          `/positions?user=${user}&limit=${limit}&offset=${offset + k * limit}&sizeThreshold=1`
+        )
+      )
     );
-    all.push(...page);
-    if (page.length < limit) break;
+    for (const page of batch) all.push(...page);
+    // A short page anywhere in the batch means we've reached the end; every
+    // page after it in this batch is already empty.
+    if (batch.some((page) => page.length < limit)) break;
   }
   return all;
 }

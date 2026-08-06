@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma, withDb, DB_ENABLED } from "../db.js";
-import { computeTraderStats, computeTraderSummary, type TraderStats } from "../stats.js";
+import { computeTraderStats, computeTraderQuick, type TraderStats } from "../stats.js";
 import { getActivityStats } from "../polymarket.js";
 import { getActivityStatsFromDb, indexWallet, type IndexState } from "../indexer.js";
 import { once } from "../inflight.js";
@@ -161,14 +161,18 @@ traderRouter.get("/:address", async (req, res) => {
   }
 });
 
-/** GET /api/trader/:address/summary — cheap headline stats (no trade paging). */
+/**
+ * GET /api/trader/:address/summary — tier 1. Canonical figures plus open
+ * positions, with no trade-history paging, so it answers in about a second
+ * while the full lookup is still walking the activity feed.
+ */
 traderRouter.get("/:address/summary", async (req, res) => {
   const address = req.params.address?.toLowerCase();
   if (!ADDRESS_RE.test(address)) {
     return res.status(400).json({ error: "Invalid wallet address." });
   }
   try {
-    const summary = await once(`summary:${address}`, () => computeTraderSummary(address));
+    const summary = await once(`quick:${address}`, () => computeTraderQuick(address));
     return res.json({ summary });
   } catch (err) {
     return res.status(502).json({

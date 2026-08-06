@@ -138,6 +138,51 @@ export async function computeTraderSummary(address: string): Promise<TraderSumma
   };
 }
 
+/** Tier 1: everything a trader page can show WITHOUT reconstructing history. */
+export interface TraderQuick extends TraderSummary {
+  openPositions: PositionView[];
+  openPositionsCount: number;
+}
+
+/**
+ * The fast half of a trader lookup.
+ *
+ * Every figure here is canonical Polymarket data — profit, today's P&L, volume,
+ * portfolio value, and the currently-held positions. None of it needs the
+ * activity walk, so all three calls run concurrently and the whole thing
+ * returns in about a second.
+ *
+ * What is deliberately absent: win rate, wins/losses, trade count, per-market
+ * entry dates, and markets already redeemed. Those are aggregates over a
+ * wallet's entire history and cannot be sampled — a win rate computed from a
+ * slice of recent trades is simply a wrong number, so it is omitted rather
+ * than approximated. `computeTraderStats` fills them in afterwards.
+ */
+export async function computeTraderQuick(address: string): Promise<TraderQuick> {
+  const user = address.toLowerCase();
+  const [lb, portfolioValue, positions] = await Promise.all([
+    getLeaderboardStats(user),
+    getValue(user),
+    getPositions(user),
+  ]);
+
+  const open = positions
+    .map(toView)
+    .filter((p) => !p.resolved)
+    .sort((a, b) => b.currentValue - a.currentValue);
+
+  return {
+    address: user,
+    profile: { name: lb.name, pseudonym: lb.pseudonym, profileImage: lb.profileImage },
+    totalProfit: lb.profit,
+    profitToday: lb.profitToday,
+    totalVolume: lb.volume,
+    portfolioValue,
+    openPositions: open,
+    openPositionsCount: open.length,
+  };
+}
+
 /** Build a resolved-position view from an activity cash-flow roll-up (a market
  *  the wallet has fully exited/redeemed, so it's gone from /positions). */
 const isoOrNull = (ts?: number): string | null =>
