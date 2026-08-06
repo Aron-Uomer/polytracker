@@ -88,6 +88,12 @@ export const CheckIcon = ({ className }: P) => (
   </svg>
 );
 
+export const MenuIcon = ({ className }: P) => (
+  <svg {...base(className)}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </svg>
+);
+
 export const XIcon = ({ className }: P) => (
   <svg {...base(className)}>
     <path d="M6 6l12 12M18 6 6 18" />

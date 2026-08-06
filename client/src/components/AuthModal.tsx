@@ -62,7 +62,7 @@ export function AuthModal({
               {tab === "signup" ? "Create your account" : "Welcome back"}
             </span>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-200">
+          <button onClick={onClose} className="text-muted hover:text-slate-200">
             <XIcon className="h-5 w-5" />
           </button>
         </div>
@@ -72,7 +72,7 @@ export function AuthModal({
             <div className="mb-4 flex justify-center">
               <GoogleButton onAuthed={onAuthed} onError={setError} />
             </div>
-            <div className="mb-4 flex items-center gap-3 text-xs text-slate-500">
+            <div className="mb-4 flex items-center gap-3 text-xs text-muted">
               <span className="h-px flex-1 bg-white/10" />
               or
               <span className="h-px flex-1 bg-white/10" />
@@ -134,7 +134,7 @@ export function AuthModal({
               <button
                 type="button"
                 onClick={() => setShow((s) => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-300"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted hover:text-slate-300"
               >
                 {show ? "Hide" : "Show"}
               </button>
@@ -146,13 +146,13 @@ export function AuthModal({
           <button
             type="submit"
             disabled={busy}
-            className="gradient-cta w-full rounded-xl py-2.5 font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+            className="gradient-cta w-full rounded-xl py-2.5 font-semibold transition hover:brightness-110 disabled:opacity-50"
           >
             {busy ? "…" : tab === "signup" ? "Create account" : "Sign in"}
           </button>
         </form>
 
-        <p className="mt-4 text-center text-xs text-slate-500">
+        <p className="mt-4 text-center text-xs text-muted">
           {tab === "signin" ? "New here? " : "Already have an account? "}
           <button
             onClick={() => setTab(tab === "signin" ? "signup" : "signin")}

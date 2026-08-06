@@ -49,7 +49,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
     <section className="animate-fadeUp py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="mb-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-500">
+          <div className="mb-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted">
             <StarIcon className="h-3.5 w-3.5" /> Your roster
           </div>
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -75,7 +75,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
               </span>
               <span className="font-mono text-sm text-slate-300">
                 <span className={atLimit ? "text-danger" : "text-slate-100"}>{state.count}</span>
-                <span className="text-slate-500"> / {state.limit}</span>
+                <span className="text-muted"> / {state.limit}</span>
               </span>
             </div>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
@@ -85,7 +85,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
               />
             </div>
             {!isFree && state.proExpiresAt && (
-              <div className="mt-2 text-[11px] text-slate-500">
+              <div className="mt-2 text-[11px] text-muted">
                 Pro until {new Date(state.proExpiresAt).toLocaleDateString()}
               </div>
             )}
@@ -109,7 +109,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
             <button
               type="submit"
               disabled={busy || atLimit}
-              className="gradient-cta inline-flex items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50"
+              className="gradient-cta inline-flex items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-semibold shadow-glow transition hover:brightness-110 disabled:opacity-50"
             >
               <PlusIcon className="h-4 w-4" /> {busy ? "Adding…" : "Track"}
             </button>
@@ -132,7 +132,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
           </div>
           <button
             onClick={onSignIn}
-            className="gradient-cta inline-flex items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-semibold text-white shadow-glow transition hover:brightness-110"
+            className="gradient-cta inline-flex items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-semibold shadow-glow transition hover:brightness-110"
           >
             Sign in or create an account
           </button>
@@ -166,10 +166,10 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
 
       {/* Cards */}
       {!state ? (
-        <p className="mt-10 text-center text-sm text-slate-500">Loading…</p>
+        <p className="mt-10 text-center text-sm text-muted">Loading…</p>
       ) : state.entries.length === 0 ? (
         <div className="glass mt-8 rounded-2xl py-16 text-center">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-slate-500">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-muted">
             <StarIcon className="h-6 w-6" />
           </div>
           <p className="mt-3 text-sm text-slate-400">
@@ -218,7 +218,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
       )}
 
       {isFree && !atLimit && lockedCount === 0 && state && state.entries.length > 0 && (
-        <p className="mt-6 text-center text-xs text-slate-600">
+        <p className="mt-6 text-center text-xs text-muted">
           On the free plan ({state.count}/{state.limit}).{" "}
           <button onClick={onUpgrade} className="text-brand-light hover:underline">
             Upgrade to Pro
@@ -235,12 +235,12 @@ function LockedCard({ entry, onRemove }: { entry: WatchEntry; onRemove: () => vo
     <div className="glass relative overflow-hidden rounded-2xl p-4">
       <div className="pointer-events-none blur-[3px] select-none">
         <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-full bg-ink-700 text-slate-500">
+          <div className="grid h-9 w-9 place-items-center rounded-full bg-ink-700 text-muted">
             <UserIcon className="h-4 w-4" />
           </div>
           <div>
             <div className="font-medium text-slate-100">{entry.label || shortAddr(entry.address)}</div>
-            <div className="font-mono text-xs text-slate-500">{shortAddr(entry.address)}</div>
+            <div className="font-mono text-xs text-muted">{shortAddr(entry.address)}</div>
           </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -256,7 +256,7 @@ function LockedCard({ entry, onRemove }: { entry: WatchEntry; onRemove: () => vo
       </div>
       <button
         onClick={onRemove}
-        className="absolute right-2 top-2 z-10 rounded-md p-1 text-slate-500 transition hover:bg-white/5 hover:text-danger"
+        className="absolute right-2 top-2 z-10 rounded-md p-1 text-muted transition hover:bg-white/5 hover:text-danger"
         title="Remove"
       >
         <XIcon className="h-4 w-4" />
@@ -301,13 +301,13 @@ function SummaryCard({
               className="h-9 w-9 rounded-full object-cover ring-1 ring-white/10"
             />
           ) : (
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-ink-700 text-slate-500 ring-1 ring-white/10">
+            <div className="grid h-9 w-9 place-items-center rounded-full bg-ink-700 text-muted ring-1 ring-white/10">
               <UserIcon className="h-4 w-4" />
             </div>
           )}
           <div>
             <div className="font-medium text-slate-100">{name}</div>
-            <div className="font-mono text-xs text-slate-500">{shortAddr(entry.address)}</div>
+            <div className="font-mono text-xs text-muted">{shortAddr(entry.address)}</div>
           </div>
         </div>
         <button
@@ -315,7 +315,7 @@ function SummaryCard({
             ev.stopPropagation();
             onRemove();
           }}
-          className="rounded-md p-1 text-slate-600 opacity-0 transition hover:bg-white/5 hover:text-danger group-hover:opacity-100"
+          className="rounded-md p-1 text-muted opacity-0 transition hover:bg-white/5 hover:text-danger group-hover:opacity-100"
           title="Remove"
         >
           <XIcon className="h-4 w-4" />
@@ -323,7 +323,7 @@ function SummaryCard({
       </div>
 
       {failed ? (
-        <p className="mt-4 text-xs text-slate-600">Couldn't load stats.</p>
+        <p className="mt-4 text-xs text-muted">Couldn't load stats.</p>
       ) : !data ? (
         <div className="shimmer mt-4 h-12 rounded" />
       ) : (
@@ -341,7 +341,7 @@ function SummaryCard({
 function Metric({ label, value, cls }: { label: string; value: string; cls?: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">{label}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
       <div className={`font-mono font-semibold tabular-nums ${cls ?? "text-slate-200"}`}>{value}</div>
     </div>
   );

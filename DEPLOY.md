@@ -62,6 +62,34 @@ Your `.env` files are git-ignored, so no secrets are pushed. Good.
 
 4. Deploy. Note the Vercel URL (e.g. `https://polytrack.vercel.app`).
 
+### Security headers
+
+`client/vercel.json` sets `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, HSTS, COOP and a
+minimal CSP on every response. Two deliberate choices worth knowing before you change them:
+
+- **COOP is `same-origin-allow-popups`, not `same-origin`.** The stricter value severs
+  `window.opener`, which can break the Google sign-in popup.
+- **The CSP only carries directives that can't break the app** (`frame-ancestors`, `base-uri`,
+  `object-src`, `form-action`). A full policy has to allow-list every origin the page talks to, and
+  getting it wrong takes the site down. If you want one, start from this and **test it on a preview
+  deployment** — substituting your own API URL:
+
+  ```
+  default-src 'self';
+  script-src 'self' https://accounts.google.com;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data: https:;
+  connect-src 'self' https://YOUR-API.onrender.com https://accounts.google.com;
+  frame-src https://accounts.google.com;
+  frame-ancestors 'none'; base-uri 'self'; object-src 'none'
+  ```
+
+  `style-src` needs `'unsafe-inline'` because the charts set inline `style` attributes, and
+  `connect-src` **must** list your Render API or every request fails.
+
+> `vercel.json` is schema-validated on deploy — it rejects unknown keys, so don't add comments to it.
+
 ---
 
 ## 3. Wire the two URLs together (the chicken-and-egg step)

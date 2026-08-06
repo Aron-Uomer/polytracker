@@ -24,7 +24,7 @@ function RankBadge({ rank }: { rank: number }) {
   return (
     <span
       className={`grid h-7 w-7 place-items-center font-mono text-sm ${
-        rank <= 3 ? "font-semibold text-slate-100" : "text-slate-500"
+        rank <= 3 ? "font-semibold text-slate-100" : "text-muted"
       }`}
     >
       {rank}
@@ -68,7 +68,7 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
     <section className="animate-fadeUp py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="mb-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-500">
+          <div className="mb-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted">
             <TrophyIcon className="h-3.5 w-3.5" /> Live rankings
           </div>
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -100,7 +100,7 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
       </div>
 
       <div className="relative mt-5 max-w-xs">
-        <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -115,10 +115,12 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
         </div>
       )}
 
-      <div className="glass mt-6 overflow-hidden rounded-2xl">
-        <table className="w-full text-sm">
+      {/* overflow-x-auto, not overflow-hidden: on a narrow screen the track
+          column sits past the edge, and hidden silently clipped it away. */}
+      <div className="glass mt-6 overflow-x-auto rounded-2xl">
+        <table className="w-full min-w-[22rem] text-sm">
           <thead>
-            <tr className="border-b border-white/[0.06] text-left text-[11px] uppercase tracking-wider text-slate-500">
+            <tr className="border-b border-white/[0.06] text-left text-[11px] uppercase tracking-wider text-muted">
               <th className="py-3 pl-5 pr-2 font-medium">#</th>
               <th className="py-3 px-2 font-medium">Trader</th>
               <th className="hidden py-3 px-2 font-medium sm:table-cell">Wallet</th>
@@ -156,7 +158,7 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
                             className="h-8 w-8 rounded-full object-cover ring-1 ring-white/10"
                           />
                         ) : (
-                          <div className="grid h-8 w-8 place-items-center rounded-full bg-ink-700 text-slate-500 ring-1 ring-white/10">
+                          <div className="grid h-8 w-8 place-items-center rounded-full bg-ink-700 text-muted ring-1 ring-white/10">
                             <UserIcon className="h-4 w-4" />
                           </div>
                         )}
@@ -165,7 +167,7 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
                         </span>
                       </div>
                     </td>
-                    <td className="hidden py-2.5 px-2 font-mono text-xs text-slate-500 sm:table-cell">
+                    <td className="hidden py-2.5 px-2 font-mono text-xs text-muted sm:table-cell">
                       {shortAddr(r.address)}
                     </td>
                     <td
@@ -189,7 +191,7 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
                 ))}
             {!loading && shown.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-10 text-center text-sm text-slate-500">
+                <td colSpan={5} className="py-10 text-center text-sm text-muted">
                   No traders match “{filter}”.
                 </td>
               </tr>
@@ -219,7 +221,7 @@ function Toggle({
           key={o.v}
           onClick={() => onChange(o.v)}
           className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-            value === o.v ? "gradient-cta text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
+            value === o.v ? "gradient-cta font-semibold" : "text-slate-400 hover:text-slate-200"
           }`}
         >
           {o.label}

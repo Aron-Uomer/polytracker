@@ -1,0 +1,6 @@
+# PolyTrack — all public pages are crawlable.
+User-agent: *
+Allow: /
+
+# Trader pages live behind the hash router (#/trader/0x…) so they aren't
+# separate URLs to crawl; the index page is the entry point.

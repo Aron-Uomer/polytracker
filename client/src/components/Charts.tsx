@@ -77,7 +77,7 @@ export function ActivityCalendar({ daily }: { daily: DailyPoint[] }) {
 
       <div className="grid grid-cols-7 gap-1.5">
         {WEEKDAYS.map((w) => (
-          <div key={w} className="pb-1 text-center text-[10px] uppercase tracking-wide text-slate-600">
+          <div key={w} className="pb-1 text-center text-[10px] uppercase tracking-wide text-muted">
             {w}
           </div>
         ))}
@@ -95,7 +95,7 @@ export function ActivityCalendar({ daily }: { daily: DailyPoint[] }) {
               className="relative aspect-square rounded-md text-[11px]"
               style={{ background: TONE[intensity(vol)] }}
             >
-              <span className={`absolute right-1 top-0.5 ${vol > 0 ? "text-white/80" : "text-slate-600"}`}>
+              <span className={`absolute right-1 top-0.5 ${vol > 0 ? "text-white/80" : "text-muted"}`}>
                 {day}
               </span>
             </div>
@@ -103,7 +103,7 @@ export function ActivityCalendar({ daily }: { daily: DailyPoint[] }) {
         })}
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+      <div className="mt-3 flex items-center justify-between text-xs text-muted">
         <span>
           {monthTrades.toLocaleString()} trades · {usd(monthVol)} volume
         </span>
@@ -160,7 +160,7 @@ export function PnlHistory({ address }: { address: string }) {
       {snaps === null ? (
         <div className="shimmer h-24 rounded-lg" />
       ) : snaps.length < 2 ? (
-        <div className="flex h-24 items-center justify-center px-4 text-center text-xs text-slate-500">
+        <div className="flex h-24 items-center justify-center px-4 text-center text-xs text-muted">
           P&amp;L history builds as the wallet is re-checked over time (needs the database).
           Come back later to see the trend.
         </div>

@@ -96,7 +96,7 @@ export function PositionsTable({ positions, mode }: Props) {
   if (positions.length === 0) {
     const label = mode === "all" ? "" : mode === "resolved" ? "closed " : `${mode} `;
     return (
-      <p className="py-10 text-center text-sm text-slate-500">No {label}positions found.</p>
+      <p className="py-10 text-center text-sm text-muted">No {label}positions found.</p>
     );
   }
 
@@ -116,7 +116,7 @@ export function PositionsTable({ positions, mode }: Props) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500">
+            <tr className="text-left text-[11px] uppercase tracking-wider text-muted">
               <SortHeader label="First buy" k="firstTradeAt" sort={sort} onSort={onSort} className="py-2.5 pr-3" />
               <SortHeader label="Last trade" k="lastTradeAt" sort={sort} onSort={onSort} className="py-2.5 pr-3" />
               <SortHeader label="Market" k="title" sort={sort} onSort={onSort} className="py-2.5 pr-3" />
@@ -175,7 +175,7 @@ export function PositionsTable({ positions, mode }: Props) {
                     >
                       {p.pnl > 0 ? "Won" : "Lost"}
                       {p.exitType === "closed" && (
-                        <span className="ml-1 text-slate-500">· sold</span>
+                        <span className="ml-1 text-muted">· sold</span>
                       )}
                     </span>
                   ) : (

@@ -15,7 +15,17 @@ function OutcomePill({ outcome }: { outcome: string }) {
       : o === "no"
       ? "border-danger/30 bg-danger/10 text-danger"
       : "border-white/10 bg-white/5 text-slate-300";
-  return <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-xs font-medium ${cls}`}>{outcome || "–"}</span>;
+  // On sports markets the outcome is a player or team name, which can be
+  // longer than the market title. Cap and ellipsize it rather than letting it
+  // push into the figures column.
+  return (
+    <span
+      title={outcome || undefined}
+      className={`max-w-[45%] shrink-0 truncate rounded-md border px-1.5 py-0.5 text-xs font-medium ${cls}`}
+    >
+      {outcome || "–"}
+    </span>
+  );
 }
 
 const DEFAULTS: SmartMoneyFilters = {
@@ -51,7 +61,7 @@ export function SmartMoney() {
 
   return (
     <section className="animate-fadeUp py-10">
-      <div className="mb-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-500">
+      <div className="mb-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted">
         <BoltIcon className="h-3.5 w-3.5" /> Follow the smart money
       </div>
       <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -81,7 +91,7 @@ export function SmartMoney() {
         {!data && !error ? (
           Array.from({ length: 8 }).map((_, i) => <div key={i} className="shimmer h-16 rounded-xl" />)
         ) : data && data.markets.length === 0 ? (
-          <div className="glass rounded-xl py-16 text-center text-sm text-slate-500">
+          <div className="glass rounded-xl py-16 text-center text-sm text-muted">
             No notable {verb} from the top {data.tradersScanned} traders in this window. Try a
             wider window or a bigger trader pool.
           </div>
@@ -94,22 +104,24 @@ export function SmartMoney() {
               rel="noreferrer"
               className="glass glass-hover flex items-center gap-3 rounded-xl p-3"
             >
-              <span className="w-5 shrink-0 text-center font-mono text-sm text-slate-500">
+              <span className="w-5 shrink-0 text-center font-mono text-sm text-muted">
                 {page * PAGE_SIZE + i + 1}
               </span>
               {m.icon && <img src={m.icon} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />}
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium text-slate-100">{m.title}</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="min-w-0 truncate text-sm font-medium text-slate-100" title={m.title}>
+                    {m.title}
+                  </span>
                   <OutcomePill outcome={m.outcome} />
                 </div>
-                {m.names.length > 0 && <div className="truncate text-xs text-slate-500">{m.names.join(", ")}</div>}
+                {m.names.length > 0 && <div className="truncate text-xs text-muted">{m.names.join(", ")}</div>}
               </div>
               <div className="shrink-0 text-right">
                 <div className={`font-mono text-sm font-semibold ${filters.side === "buy" ? "text-brand-light" : "text-danger"}`}>
                   {m.traders} {m.traders === 1 ? "trader" : "traders"}
                 </div>
-                <div className="font-mono text-xs text-slate-500">{usd(m.usdc)}</div>
+                <div className="font-mono text-xs text-muted">{usd(m.usdc)}</div>
               </div>
             </a>
           ))
@@ -136,7 +148,7 @@ function Seg({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="px-0.5 text-[10px] uppercase tracking-wider text-slate-600">{label}</span>
+      <span className="px-0.5 text-[10px] uppercase tracking-wider text-muted">{label}</span>
       <div className="glass inline-flex rounded-lg p-0.5">
         {options.map(([v, lbl]) => (
           <button

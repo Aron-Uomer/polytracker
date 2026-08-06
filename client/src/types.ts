@@ -148,6 +148,9 @@ export interface TraderSummary {
   profitToday: number;
   totalVolume: number;
   portfolioValue: number;
+  /** Present on the trader-page summary; absent on lighter callers. */
+  openPositions?: PositionView[];
+  openPositionsCount?: number;
 }
 
 export type Plan = "free" | "pro";

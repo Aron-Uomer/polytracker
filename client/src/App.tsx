@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchTrader,
+  fetchTraderSummary,
   getWatchlist,
   addWatch,
   removeWatch,
@@ -12,7 +13,13 @@ import {
   startCheckout,
   type BillingConfig,
 } from "./api";
-import type { AddWatchResult, AuthUser, TraderStats, WatchlistState } from "./types";
+import type {
+  AddWatchResult,
+  AuthUser,
+  TraderStats,
+  TraderSummary,
+  WatchlistState,
+} from "./types";
 import { AuthModal } from "./components/AuthModal";
 import { usd, usdFull, pct, pnlColor, tradeSince, shortAddr } from "./format";
 import { StatCard } from "./components/StatCard";
@@ -31,13 +38,13 @@ import {
   SearchIcon,
   TrophyIcon,
   StarIcon,
-  TargetIcon,
-  CoinsIcon,
-  ChartIcon,
   RefreshIcon,
   BoltIcon,
   ColumnsIcon,
+  MenuIcon,
+  XIcon,
 } from "./components/icons";
+import { SplitFlap, BoardRow } from "./components/Board";
 
 type Route = "home" | "leaderboard" | "watchlist" | "smart" | "compare";
 
@@ -68,14 +75,28 @@ function goTo(route: Route, trader?: string) {
   window.scrollTo({ top: 0 });
 }
 
+// Board rows, not feature cards. Each one is a claim the product can actually
+// substantiate the moment a wallet lands on the board.
 const FEATURES = [
-  { Icon: TargetIcon, title: "Real win rate", body: "Reconstructed from a wallet's full trade history, not just whatever positions happen to be open." },
-  { Icon: CoinsIcon, title: "Complete P&L & volume", body: "Canonical all-time profit, today's P&L and lifetime volume, straight from Polymarket." },
-  { Icon: ChartIcon, title: "Every position & metric", body: "Open & resolved bets with entry dates, plus a dozen derived stats and charts." },
+  {
+    title: "Real win rate",
+    body: "Reconstructed from a wallet's full trade history, not just whatever positions happen to be open. A trader who sold out at a loss last month still carries that loss here.",
+  },
+  {
+    title: "Complete P&L & volume",
+    body: "Canonical all-time profit, today's P&L and lifetime volume, straight from Polymarket's own record.",
+  },
+  {
+    title: "Every position & metric",
+    body: "Open and resolved bets with entry dates, plus a dozen derived stats and charts you can sort by any column.",
+  },
 ];
 
 export default function App() {
   const [stats, setStats] = useState<TraderStats | null>(null);
+  // Tier 1: canonical figures + open positions, back in ~1s. Rendered while the
+  // full history walk is still running, then superseded by it.
+  const [quick, setQuick] = useState<TraderSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cached, setCached] = useState(false);
@@ -152,14 +173,34 @@ export default function App() {
   async function lookup(addr: string, refresh = false) {
     setLoading(true);
     setError(null);
+    setQuick(null);
+    setStats(null);
+
+    // Both go out at once. The summary needs no trade-history paging and lands
+    // in about a second; the full lookup can take 30s on an unindexed wallet.
+    // Whichever arrives first renders, and the full one always wins.
+    let settled = false;
+    fetchTraderSummary(addr)
+      .then((s) => {
+        // Ignore a late summary — the full stats already supersede it, and a
+        // stale write here would flicker the page backwards.
+        if (!settled && lastLookedUp.current === addr) setQuick(s);
+      })
+      .catch(() => {
+        /* tier 1 is an accelerator; its failure must not break the lookup */
+      });
+
     try {
       const res = await fetchTrader(addr, refresh);
+      settled = true;
+      if (lastLookedUp.current !== addr) return; // navigated away mid-flight
       setStats(res.stats);
       setCached(res.cached);
       setIndexing(Boolean(res.indexing));
       const name = res.stats.profile.name || res.stats.profile.pseudonym || shortAddr(addr);
       pushRecent(addr, name);
     } catch (e) {
+      settled = true;
       setError(e instanceof Error ? e.message : "Something went wrong");
       setStats(null);
     } finally {
@@ -172,6 +213,7 @@ export default function App() {
     if (route !== "home") return;
     if (!trader) {
       setStats(null);
+      setQuick(null);
       setError(null);
       lastLookedUp.current = null;
       return;
@@ -237,6 +279,25 @@ export default function App() {
   }
   const isTracked = (addr: string) => !!watch?.entries.some((e) => e.address === addr.toLowerCase());
 
+  // The rail cannot carry five plates plus the account control under ~640px,
+  // so below that the nav collapses to one lever and drops as board rows.
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+  // Any route change closes it, browser-back included.
+  useEffect(() => setMenuOpen(false), [route, trader]);
+
+  const navTo = (r: Route) => {
+    setMenuOpen(false);
+    goTo(r);
+  };
+
   const onHome = route === "home";
   const showHero = onHome && !trader;
   const isPro = watch?.plan === "pro";
@@ -255,35 +316,63 @@ export default function App() {
       <div className="bg-grain" />
 
       {/* Nav */}
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-ink-950/70 backdrop-blur-xl">
+      {/* The top rail. Opaque steel sitting proud of the chassis — not a
+          translucent bar, which would put glass back in a world that has none. */}
+      <header className="rail sticky top-0 z-40 border-b border-board-rule">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <button onClick={() => goTo("home")} className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-lg gradient-cta">
-              <BoltIcon className="h-4 w-4 text-white" />
+          <button
+            onClick={() => navTo("home")}
+            aria-label="PolyTrack home"
+            className="group flex items-center gap-2.5"
+          >
+            <span className="border border-bone/35 px-[7px] py-[3px] font-display text-[11px] font-bold uppercase leading-none tracking-plate text-bone transition group-hover:border-lamp group-hover:text-lamp">
+              PT
             </span>
-            <span className="font-display text-[15px] font-bold tracking-tight">
-              Poly<span className="gradient-text">Track</span>
+            <span className="font-display text-[15px] font-bold uppercase leading-none tracking-plate text-bone">
+              Polytrack
             </span>
           </button>
 
           <div className="flex items-center gap-1.5">
-          <nav className="flex items-center gap-0.5 text-sm">
-            <NavLink icon={<SearchIcon className="h-4 w-4" />} label="Tracker" active={onHome} onClick={() => goTo("home")} />
-            <NavLink icon={<TrophyIcon className="h-4 w-4" />} label="Leaderboard" active={route === "leaderboard"} onClick={() => goTo("leaderboard")} />
-            <NavLink icon={<BoltIcon className="h-4 w-4" />} label="Smart money" active={route === "smart"} onClick={() => goTo("smart")} pro={!isPro} />
-            <NavLink icon={<ColumnsIcon className="h-4 w-4" />} label="Compare" active={route === "compare"} onClick={() => goTo("compare")} pro={!isPro} />
-            <NavLink icon={<StarIcon className="h-4 w-4" />} label="My Traders" active={route === "watchlist"} onClick={() => goTo("watchlist")} badge={watch && watch.count > 0 ? watch.count : undefined} />
-          </nav>
-          <span className="mx-1 hidden h-5 w-px bg-white/10 sm:block" />
-          <AccountControl user={user} onSignIn={() => setAuthOpen(true)} onSignOut={signOut} />
+            <nav className="hidden items-center gap-0.5 text-sm sm:flex">
+              <NavLink icon={<SearchIcon className="h-4 w-4" />} label="Tracker" active={onHome} onClick={() => navTo("home")} />
+              <NavLink icon={<TrophyIcon className="h-4 w-4" />} label="Leaderboard" active={route === "leaderboard"} onClick={() => navTo("leaderboard")} />
+              <NavLink icon={<BoltIcon className="h-4 w-4" />} label="Smart money" active={route === "smart"} onClick={() => navTo("smart")} pro={!isPro} />
+              <NavLink icon={<ColumnsIcon className="h-4 w-4" />} label="Compare" active={route === "compare"} onClick={() => navTo("compare")} pro={!isPro} />
+              <NavLink icon={<StarIcon className="h-4 w-4" />} label="My Traders" active={route === "watchlist"} onClick={() => navTo("watchlist")} badge={watch && watch.count > 0 ? watch.count : undefined} />
+            </nav>
+            <span className="mx-1 hidden h-5 w-px bg-board-rule sm:block" />
+            <AccountControl user={user} onSignIn={() => setAuthOpen(true)} onSignOut={signOut} />
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-expanded={menuOpen}
+              aria-controls="rail-menu"
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              className="ml-0.5 grid h-9 w-9 shrink-0 place-items-center border border-board-rule text-bone transition hover:border-lamp hover:text-lamp sm:hidden"
+            >
+              {menuOpen ? <XIcon className="h-4 w-4" /> : <MenuIcon className="h-4 w-4" />}
+            </button>
           </div>
         </div>
+
+        {/* Departure rows dropped from the rail. Same grammar as the page, so
+            the menu is part of the board rather than an overlay on top of it. */}
+        {menuOpen && (
+          <nav id="rail-menu" className="chassis border-t border-board-rule sm:hidden">
+            <MenuRow icon={<SearchIcon className="h-4 w-4" />} label="Tracker" active={onHome} onClick={() => navTo("home")} />
+            <MenuRow icon={<TrophyIcon className="h-4 w-4" />} label="Leaderboard" active={route === "leaderboard"} onClick={() => navTo("leaderboard")} />
+            <MenuRow icon={<BoltIcon className="h-4 w-4" />} label="Smart money" active={route === "smart"} onClick={() => navTo("smart")} pro={!isPro} />
+            <MenuRow icon={<ColumnsIcon className="h-4 w-4" />} label="Compare" active={route === "compare"} onClick={() => navTo("compare")} pro={!isPro} />
+            <MenuRow icon={<StarIcon className="h-4 w-4" />} label="My Traders" active={route === "watchlist"} onClick={() => navTo("watchlist")} badge={watch && watch.count > 0 ? watch.count : undefined} />
+          </nav>
+        )}
       </header>
 
       {authOpen && <AuthModal onClose={closeAuth} onAuthed={onAuthed} />}
 
       {flash && (
-        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 animate-fadeUp rounded-xl border border-white/10 bg-ink-800 px-4 py-2.5 text-sm text-slate-100 shadow-xl">
+        <div className="rail fixed bottom-5 left-1/2 z-50 -translate-x-1/2 animate-fadeUp border border-board-rule px-4 py-2.5 text-sm text-slate-100 shadow-elevated">
           {flash}
         </div>
       )}
@@ -326,32 +415,33 @@ export default function App() {
 
         {onHome && (
           <>
-            <section className={showHero ? "pt-16 pb-4 text-center sm:pt-24" : "pt-8"}>
-              {showHero && (
-                <div className="animate-fadeUp">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300 shadow-soft">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-                    Live Polymarket trader analytics
-                  </span>
-                  <h1 className="mx-auto mt-6 max-w-3xl text-5xl font-bold leading-[1.04] tracking-tight sm:text-7xl">
-                    See any trader's <span className="gradient-text">real stats</span>
-                  </h1>
-                  <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-slate-400 sm:text-lg">
-                    Search a trader or paste a Polymarket wallet to reveal win rate, profit,
-                    volume, open bets and a full breakdown in seconds.
-                  </p>
+            <section className={showHero ? "pt-6 sm:pt-10" : "pt-8"}>
+              {showHero ? (
+                /* The board itself: a slab mounted on the wall of the concourse,
+                   bleeding to the gutter on phones and framed on desktop. */
+                <div className="chassis chassis-lit relative -mx-4 overflow-hidden border-y border-board-rule px-5 py-12 sm:mx-0 sm:border sm:px-10 sm:py-16 lg:px-14 lg:py-20">
+                  <div className="relative">
+                    <h1 className="max-w-[15ch] font-display text-[clamp(2.4rem,8.2vw,5rem)] font-bold uppercase leading-[0.9] tracking-[-0.035em] text-bone">
+                      Who is actually good?
+                    </h1>
+                    <p className="mt-6 max-w-[54ch] text-[15px] leading-relaxed text-bone-dim sm:text-base">
+                      Polymarket publishes profit, and profit hides one lucky
+                      resolution. Paste a wallet and the board settles on the whole
+                      record — every trade, including the ones already closed.
+                    </p>
+
+                    <div className="mt-9 flex max-w-2xl">
+                      <SearchBox onPick={selectTrader} loading={loading} />
+                    </div>
+
+                    <div className="mt-11 border-t border-board-rule pt-7 sm:mt-14">
+                      <SplitFlap text="THE WHOLE RECORD" />
+                    </div>
+                  </div>
                 </div>
-              )}
-
-              <div className={`relative mx-auto mt-9 flex ${showHero ? "max-w-2xl" : "max-w-full"}`}>
-                <SearchBox onPick={selectTrader} loading={loading} />
-              </div>
-
-              {showHero && (
-                <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-500">
-                  <span className="flex items-center gap-1.5"><span className="h-1 w-1 rounded-full bg-brand-light" /> Real win rate & P&L</span>
-                  <span className="flex items-center gap-1.5"><span className="h-1 w-1 rounded-full bg-brand-light" /> Full position history</span>
-                  <span className="flex items-center gap-1.5"><span className="h-1 w-1 rounded-full bg-brand-light" /> Free to use</span>
+              ) : (
+                <div className="relative flex max-w-full">
+                  <SearchBox onPick={selectTrader} loading={loading} />
                 </div>
               )}
             </section>
@@ -362,7 +452,16 @@ export default function App() {
               </div>
             )}
 
-            {loading && !stats && <ResultsSkeleton />}
+            {loading && !stats && !quick && <ResultsSkeleton />}
+
+            {quick && !stats && !error && (
+              <QuickView
+                quick={quick}
+                tracked={isTracked(quick.address)}
+                onTrack={addTrader}
+                onNeedUpgrade={() => goTo("watchlist")}
+              />
+            )}
 
             {stats && !error && (
               <section className="animate-fadeUp mt-8 space-y-6 pb-16">
@@ -429,33 +528,24 @@ export default function App() {
                   </div>
                 </div>
 
-                <p className="text-right text-xs text-slate-600">
+                <p className="text-right text-xs text-muted">
                   Open positions value {usdFull(stats.openPositionsValue)} · {cached ? "cached" : "fresh"} · updated {new Date(stats.lastUpdated).toLocaleString()}
                 </p>
               </section>
             )}
 
             {showHero && (
-              <section className="mt-24 pb-24">
-                <div className="mb-8 text-center">
-                  <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Why PolyTrack
-                  </span>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-                    Numbers you can actually trust
-                  </h2>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-3">
+              /* Departure-board rows, not a card grid. The rule and the lamp
+                 carry the structure; nothing here is a container. */
+              <section className="mt-20 pb-24 sm:mt-24">
+                <h2 className="font-display text-[12px] font-bold uppercase tracking-plate text-bone-dim">
+                  What the board reads
+                </h2>
+                <div className="mt-5 border-b border-board-rule">
                   {FEATURES.map((f) => (
-                    <div key={f.title} className="glass glass-hover rounded-2xl p-6">
-                      <div className="grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-brand-light">
-                        <f.Icon className="h-5 w-5" />
-                      </div>
-                      <h3 className="mt-4 font-display text-base font-semibold text-slate-100">
-                        {f.title}
-                      </h3>
-                      <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{f.body}</p>
-                    </div>
+                    <BoardRow key={f.title} label={f.title}>
+                      {f.body}
+                    </BoardRow>
                   ))}
                 </div>
               </section>
@@ -464,12 +554,80 @@ export default function App() {
         )}
       </main>
 
-      <footer className="border-t border-white/[0.06]">
-        <div className="mx-auto max-w-7xl px-4 py-6 text-center text-xs text-slate-600">
-          PolyTrack · Data from Polymarket's public API · For informational purposes only.
+      {/* Bottom rail, engraved. */}
+      <footer className="rail border-t border-board-rule">
+        <div className="mx-auto max-w-7xl px-4 py-7">
+          <p className="font-display text-[10px] font-medium uppercase tracking-plate text-bone-dim sm:text-[11px]">
+            PolyTrack · Data from Polymarket's public API · Informational only
+          </p>
         </div>
       </footer>
     </>
+  );
+}
+
+/**
+ * Tier 1 view — rendered while the history walk is still running.
+ *
+ * Every figure shown is canonical Polymarket data. Win rate and trade count
+ * are aggregates over a wallet's whole history, so they appear as pending
+ * rather than estimated from a partial read: a win rate sampled from recent
+ * trades is not an approximation, it is a wrong number.
+ */
+function QuickView({
+  quick,
+  tracked,
+  onTrack,
+  onNeedUpgrade,
+}: {
+  quick: TraderSummary;
+  tracked: boolean;
+  onTrack: (addr: string) => Promise<AddWatchResult>;
+  onNeedUpgrade: () => void;
+}) {
+  const open = quick.openPositions ?? [];
+  return (
+    <section className="animate-fadeUp mt-8 space-y-6 pb-16">
+      <div className="flex items-center gap-2 border border-board-rule bg-lamp/[0.07] px-4 py-2.5 text-sm text-lamp">
+        <span className="h-1.5 w-1.5 animate-filament rounded-full bg-lamp" />
+        Reading the full trade history — win rate and totals are still settling.
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <TraderHeader stats={{ address: quick.address, profile: quick.profile }} />
+        <TrackButton
+          address={quick.address}
+          tracked={tracked}
+          onAdd={onTrack}
+          onNeedUpgrade={onNeedUpgrade}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatCard
+          label="Total P&L"
+          value={`${quick.totalProfit >= 0 ? "+" : ""}${usd(quick.totalProfit)}`}
+          valueClass={pnlColor(quick.totalProfit)}
+          sub={`Today ${quick.profitToday >= 0 ? "+" : ""}${usd(quick.profitToday)}`}
+        />
+        <StatCard label="Win Rate" value="—" sub="Reading history…" />
+        <StatCard label="Total Trades" value="—" sub={`${usd(quick.totalVolume)} volume`} />
+        <StatCard
+          label="Portfolio Value"
+          value={usd(quick.portfolioValue)}
+          sub={`${quick.openPositionsCount ?? open.length} open positions`}
+        />
+      </div>
+
+      {open.length > 0 && (
+        <div className="glass rounded-2xl p-4">
+          <h3 className="mb-2 font-display text-[12px] font-bold uppercase tracking-plate text-bone-dim">
+            Open positions
+          </h3>
+          <PositionsTable positions={open} mode="open" />
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -493,7 +651,7 @@ function ResultsSkeleton() {
         <div className="shimmer h-44 rounded-xl" />
       </div>
       <div className="shimmer h-48 rounded-2xl" />
-      <p className="text-center text-xs text-slate-600">
+      <p className="text-center text-xs text-muted">
         Crunching the full trade history this can take a few seconds for very active wallets.
       </p>
     </section>
@@ -523,7 +681,7 @@ function AccountControl({
     return (
       <button
         onClick={onSignIn}
-        className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-slate-200 transition hover:border-brand hover:text-brand-light"
+        className="border border-board-rule px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-plate text-bone transition hover:border-lamp hover:text-lamp"
       >
         Sign in
       </button>
@@ -535,25 +693,25 @@ function AccountControl({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="grid h-8 w-8 place-items-center rounded-full bg-brand text-sm font-semibold text-white ring-1 ring-white/15"
+        className="grid h-8 w-8 place-items-center bg-lamp font-display text-[13px] font-bold text-board"
         title={user.email}
       >
         {initial}
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-ink-900 shadow-xl">
-          <div className="border-b border-white/5 px-4 py-3">
+        <div className="chassis absolute right-0 z-50 mt-1 w-56 overflow-hidden border border-board-rule shadow-elevated">
+          <div className="border-b border-board-rule px-4 py-3">
             <div className="truncate text-sm font-medium text-slate-100">{user.name || "Account"}</div>
-            <div className="truncate text-xs text-slate-500">{user.email}</div>
+            <div className="truncate text-xs text-muted">{user.email}</div>
             <span
-              className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                user.plan === "pro" ? "bg-premium/15 text-premium" : "bg-white/5 text-slate-400"
+              className={`mt-2 inline-block px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-plate ${
+                user.plan === "pro" ? "bg-premium/20 text-premium" : "bg-bone/[0.07] text-bone-dim"
               }`}
             >
               {user.plan} plan
             </span>
             {user.plan === "pro" && user.proExpiresAt && (
-              <div className="mt-1.5 text-[11px] text-slate-500">
+              <div className="mt-1.5 text-[11px] text-muted">
                 Pro until {new Date(user.proExpiresAt).toLocaleDateString()}
               </div>
             )}
@@ -563,13 +721,54 @@ function AccountControl({
               setOpen(false);
               onSignOut();
             }}
-            className="w-full px-4 py-2.5 text-left text-sm text-slate-300 transition hover:bg-white/5"
+            className="w-full px-4 py-2.5 text-left text-sm text-slate-300 transition hover:bg-lamp/10 hover:text-bone"
           >
             Sign out
           </button>
         </div>
       )}
     </div>
+  );
+}
+
+/* One row of the dropped menu. Full-width, hairline-separated, 48px+ tall so
+   it clears the touch-target floor the icon-only rail could not. */
+function MenuRow({
+  icon,
+  label,
+  active,
+  onClick,
+  badge,
+  pro,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  badge?: number;
+  pro?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={`flex w-full items-center gap-3 border-b border-board-rule px-4 py-4 text-left font-display text-[12px] font-bold uppercase tracking-plate transition last:border-b-0 ${
+        active ? "bg-lamp/15 text-lamp" : "text-bone-dim hover:bg-bone/[0.06] hover:text-bone"
+      }`}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className="flex-1">{label}</span>
+      {pro && (
+        <span className="border border-premium/40 px-1 text-[9px] font-bold uppercase leading-[1.4] tracking-plate text-premium">
+          Pro
+        </span>
+      )}
+      {badge !== undefined && (
+        <span className="bg-lamp px-1.5 font-mono text-[10px] font-bold leading-[1.5] text-board">
+          {badge}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -592,19 +791,23 @@ function NavLink({
     <button
       onClick={onClick}
       title={pro ? `${label} (Pro)` : label}
-      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 transition sm:px-3 ${
-        active ? "bg-white/10 text-slate-100" : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 font-display text-[11px] font-bold uppercase tracking-plate transition sm:px-3 ${
+        active
+          ? "bg-lamp/15 text-lamp"
+          : "text-bone-dim hover:bg-bone/[0.06] hover:text-bone"
       }`}
     >
       {icon}
       <span className="hidden lg:inline">{label}</span>
       {pro && (
-        <span className="rounded bg-premium/15 px-1 text-[9px] font-bold uppercase tracking-wide text-premium">
+        <span className="border border-premium/40 px-1 text-[9px] font-bold uppercase leading-[1.4] tracking-plate text-premium">
           Pro
         </span>
       )}
       {badge !== undefined && (
-        <span className="rounded-full bg-brand/25 px-1.5 text-xs font-medium text-brand-light">{badge}</span>
+        <span className="bg-lamp px-1.5 font-mono text-[10px] font-bold leading-[1.5] text-board">
+          {badge}
+        </span>
       )}
     </button>
   );

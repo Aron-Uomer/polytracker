@@ -18,7 +18,7 @@ export function Pager({
 
   return (
     <div className="mt-4 flex items-center justify-between text-sm">
-      <span className="text-slate-500">
+      <span className="text-muted">
         {start + 1}–{Math.min(start + pageSize, count)} of {count}
       </span>
       <div className="flex items-center gap-2">

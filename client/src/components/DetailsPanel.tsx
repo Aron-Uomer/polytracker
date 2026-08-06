@@ -12,7 +12,7 @@ function Cell({
 }) {
   return (
     <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 transition hover:border-white/15">
-      <div className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+      <div className="text-[10px] font-medium uppercase tracking-wider text-muted">
         {label}
       </div>
       <div className={`mt-0.5 font-mono text-base font-semibold ${valueClass ?? "text-slate-200"}`}>

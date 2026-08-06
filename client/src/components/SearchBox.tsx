@@ -56,33 +56,39 @@ export function SearchBox({
     else if (matches[0]) pick(matches[0].address);
   }
 
-  const showDropdown = open && (matches.length > 0 || (query.length < 2 && (recent.length > 0)));
+  const showDropdown = open && (matches.length > 0 || (query.length < 2 && recent.length > 0));
 
   return (
     <div ref={boxRef} className="relative flex-1">
-      <form onSubmit={submit} className="flex gap-3">
-        <div className="relative flex-1">
-          <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+      {/* The slot: one unit milled into the chassis, with the lever at its
+          right. Not an input floating next to a button. */}
+      <form
+        onSubmit={submit}
+        className="slot flex items-stretch border border-board-rule"
+      >
+        <div className="relative flex flex-1 items-center">
+          <SearchIcon className="pointer-events-none absolute left-4 h-4 w-4 text-bone-dim" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => setOpen(true)}
-            placeholder="Search a trader by name, or paste a 0x… address"
+            placeholder="name or 0x address"
             spellCheck={false}
-            className="w-full rounded-xl border border-white/10 bg-white/5 py-3.5 pl-11 pr-4 text-sm outline-none transition focus:border-brand focus:bg-white/[0.07]"
+            aria-label="Search a trader by name or wallet address"
+            className="w-full bg-transparent py-4 pl-11 pr-4 font-mono text-[13px] text-bone outline-none placeholder:text-bone-dim sm:py-5"
           />
         </div>
         <button
           type="submit"
           disabled={loading}
-          className="gradient-cta rounded-xl px-7 py-3.5 font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+          className="shrink-0 bg-lamp px-6 font-display text-[13px] font-bold uppercase tracking-plate text-board transition hover:bg-lamp-hot disabled:opacity-55 sm:px-9"
         >
-          {loading ? "…" : "Track"}
+          {loading ? "Reading…" : "Track"}
         </button>
       </form>
 
       {showDropdown && (
-        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-ink-900 shadow-xl">
+        <div className="chassis absolute z-20 mt-1 w-full overflow-hidden border border-board-rule shadow-elevated">
           {matches.length > 0
             ? matches.map((r) => (
                 <Row
@@ -98,20 +104,28 @@ export function SearchBox({
                   {recent.length > 0 && (
                     <Section label="Recent">
                       {recent.map((r) => (
-                        <Row key={r.address} title={r.name} sub={`${r.address.slice(0, 8)}…`} onClick={() => pick(r.address)} />
+                        <Row
+                          key={r.address}
+                          title={r.name}
+                          sub={`${r.address.slice(0, 8)}…`}
+                          onClick={() => pick(r.address)}
+                        />
                       ))}
                     </Section>
                   )}
                   <Section label="Examples">
                     {EXAMPLES.map((e) => (
-                      <Row key={e.address} title={e.label} sub={`${e.address.slice(0, 8)}…`} onClick={() => pick(e.address)} />
+                      <Row
+                        key={e.address}
+                        title={e.label}
+                        sub={`${e.address.slice(0, 8)}…`}
+                        onClick={() => pick(e.address)}
+                      />
                     ))}
                   </Section>
                 </>
               )}
-          {isAddr && (
-            <Row title="Look up this address" sub={query} onClick={() => pick(query.trim())} />
-          )}
+          {isAddr && <Row title="Look up this address" sub={query} onClick={() => pick(query.trim())} />}
         </div>
       )}
     </div>
@@ -120,8 +134,10 @@ export function SearchBox({
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="border-b border-white/5 py-1 last:border-0">
-      <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-slate-600">{label}</div>
+    <div className="border-b border-board-rule py-1 last:border-0">
+      <div className="px-3 py-1 font-display text-[10px] uppercase tracking-plate text-bone-dim">
+        {label}
+      </div>
       {children}
     </div>
   );
@@ -141,18 +157,18 @@ function Row({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-white/5"
+      className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-lamp/10"
     >
       {img ? (
-        <img src={img} alt="" className="h-7 w-7 rounded-full object-cover ring-1 ring-white/10" />
+        <img src={img} alt="" className="h-7 w-7 object-cover ring-1 ring-board-rule" />
       ) : (
-        <span className="grid h-7 w-7 place-items-center rounded-full bg-ink-700 text-slate-500">
+        <span className="grid h-7 w-7 place-items-center bg-board-slot text-bone-dim">
           <UserIcon className="h-3.5 w-3.5" />
         </span>
       )}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm text-slate-200">{title}</span>
-        <span className="block truncate font-mono text-xs text-slate-500">{sub}</span>
+        <span className="block truncate font-mono text-[11px] text-bone-dim">{sub}</span>
       </span>
     </button>
   );

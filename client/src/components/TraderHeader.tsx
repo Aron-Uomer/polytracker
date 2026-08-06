@@ -2,7 +2,11 @@ import type { TraderStats } from "../types";
 import { shortAddr } from "../format";
 import { UserIcon, ExternalIcon } from "./icons";
 
-export function TraderHeader({ stats }: { stats: TraderStats }) {
+// Only identity is needed here, so the tier-1 summary can render this header
+// before the full stats have finished computing.
+type HeaderStats = Pick<TraderStats, "address" | "profile">;
+
+export function TraderHeader({ stats }: { stats: HeaderStats }) {
   const displayName =
     stats.profile.name || stats.profile.pseudonym || shortAddr(stats.address);
   return (

@@ -18,7 +18,7 @@ export function ProGate({
   return (
     <section className="animate-fadeUp grid place-items-center py-20 sm:py-28">
       <div className="glass w-full max-w-md rounded-2xl p-8 text-center">
-        <span className="text-xs uppercase tracking-[0.2em] text-slate-500">Pro feature</span>
+        <span className="text-xs uppercase tracking-[0.2em] text-muted">Pro feature</span>
         <div className="mx-auto mt-4 grid h-11 w-11 place-items-center rounded-xl border border-white/10 text-premium">
           <CrownIcon className="h-5 w-5" />
         </div>
@@ -36,11 +36,11 @@ export function ProGate({
 
         <button
           onClick={onUpgrade}
-          className="gradient-cta mt-7 w-full rounded-xl py-3 font-semibold text-white transition hover:brightness-110"
+          className="gradient-cta mt-7 w-full rounded-xl py-3 font-semibold transition hover:brightness-110"
         >
           Upgrade to Pro
         </button>
-        <p className="mt-3 text-xs text-slate-500">$10 for 30 days. Pay with crypto.</p>
+        <p className="mt-3 text-xs text-muted">$10 for 30 days. Pay with crypto.</p>
       </div>
     </section>
   );

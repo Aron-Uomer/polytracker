@@ -53,7 +53,7 @@ export function Compare({
 
   return (
     <section className="animate-fadeUp py-10">
-      <div className="mb-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-500">
+      <div className="mb-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted">
         Head to head
       </div>
       <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -73,7 +73,7 @@ export function Compare({
         />
         <button
           onClick={() => add(input)}
-          className="gradient-cta inline-flex items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-semibold text-white transition hover:brightness-110"
+          className="gradient-cta inline-flex items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-semibold transition hover:brightness-110"
         >
           <PlusIcon className="h-4 w-4" /> Add
         </button>
@@ -81,7 +81,7 @@ export function Compare({
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       {quickAdd.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-slate-500">From your roster:</span>
+          <span className="text-muted">From your roster:</span>
           {quickAdd.map((w) => (
             <button
               key={w.address}
@@ -95,7 +95,7 @@ export function Compare({
       )}
 
       {addrs.length === 0 ? (
-        <div className="glass mt-8 rounded-xl py-16 text-center text-sm text-slate-500">
+        <div className="glass mt-8 rounded-xl py-16 text-center text-sm text-muted">
           Add two or more traders to compare them.
         </div>
       ) : (
@@ -106,14 +106,14 @@ export function Compare({
                 <th className="w-32" />
                 {addrs.map((a) => (
                   <th key={a} className="p-3 text-center align-bottom">
-                    <button onClick={() => remove(a)} className="float-right text-slate-600 hover:text-danger">
+                    <button onClick={() => remove(a)} className="float-right text-muted hover:text-danger">
                       <XIcon className="h-4 w-4" />
                     </button>
                     <div className="flex cursor-pointer flex-col items-center gap-1.5" onClick={() => onSelect(a)}>
                       {data[a]?.profile.profileImage ? (
                         <img src={data[a]!.profile.profileImage!} alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-white/10" />
                       ) : (
-                        <span className="grid h-10 w-10 place-items-center rounded-full bg-ink-700 text-slate-500 ring-1 ring-white/10">
+                        <span className="grid h-10 w-10 place-items-center rounded-full bg-ink-700 text-muted ring-1 ring-white/10">
                           <UserIcon className="h-5 w-5" />
                         </span>
                       )}
@@ -131,14 +131,14 @@ export function Compare({
                 const best = Math.max(...vals.filter((v): v is number => v !== null), -Infinity);
                 return (
                   <tr key={row.label} className="border-t border-white/[0.06]">
-                    <td className="py-3 pr-3 text-xs uppercase tracking-wider text-slate-500">{row.label}</td>
+                    <td className="py-3 pr-3 text-xs uppercase tracking-wider text-muted">{row.label}</td>
                     {addrs.map((a, i) => {
                       const v = vals[i];
                       const colorize = row.label === "Total P&L" || row.label === "Today";
                       return (
                         <td key={a} className="p-3 text-center">
                           {v === null ? (
-                            <span className="text-slate-600">…</span>
+                            <span className="text-muted">…</span>
                           ) : (
                             <span
                               className={`font-mono font-semibold tabular-nums ${

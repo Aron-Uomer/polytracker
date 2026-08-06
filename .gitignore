@@ -8,3 +8,9 @@ build/
 server/prisma/*.db
 coverage/
 *.tsbuildinfo
+
+# Impeccable design tooling. The skill is reinstallable with
+# `npx impeccable install`, so it stays out of the product diff; .impeccable/
+# is hook cache and decision-page session state.
+.claude/
+.impeccable/
