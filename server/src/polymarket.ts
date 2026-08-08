@@ -38,23 +38,67 @@ export interface PmValue {
 // indefinitely.
 const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS ?? 15000);
 
+// A whale lookup makes ~50 upstream calls, so a single transient blip anywhere
+// in the walk used to fail the entire request. Every call here is an idempotent
+// GET, so retrying is always safe.
+const FETCH_RETRIES = Number(process.env.FETCH_RETRIES ?? 2);
+const RETRY_BASE_MS = Number(process.env.FETCH_RETRY_BASE_MS ?? 400);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Transient: worth another go. A 4xx other than 429 will fail identically. */
+function isRetryable(status: number): boolean {
+  return status === 429 || status === 408 || status >= 500;
+}
+
+function isTransientNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // Undici surfaces connect/socket failures by name or cause.code; timeouts
+  // abort. All of these are worth one more attempt.
+  if (err.name === "TimeoutError" || err.name === "AbortError") return true;
+  const code = (err as { cause?: { code?: string } }).cause?.code ?? "";
+  return /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|UND_ERR/.test(code || err.message);
+}
+
 async function getJson<T>(path: string, base = BASE): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${base}${path}`, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-  } catch (err) {
-    if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
-      throw new Error(`Polymarket API ${path} timed out after ${FETCH_TIMEOUT_MS}ms`);
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt <= FETCH_RETRIES; attempt++) {
+    if (attempt > 0) {
+      // Exponential backoff with jitter, so concurrent lookups that trip the
+      // same limit don't march back in lockstep.
+      const backoff = RETRY_BASE_MS * 2 ** (attempt - 1);
+      await sleep(backoff + Math.random() * RETRY_BASE_MS);
     }
-    throw err;
+
+    let res: Response;
+    try {
+      res = await fetch(`${base}${path}`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch (err) {
+      lastErr = isTransientNetworkError(err)
+        ? new Error(`Polymarket API ${path} network failure: ${(err as Error).message}`)
+        : err;
+      if (attempt < FETCH_RETRIES && isTransientNetworkError(err)) continue;
+      throw lastErr;
+    }
+
+    if (res.ok) return (await res.json()) as T;
+
+    lastErr = new Error(`Polymarket API ${path} -> ${res.status} ${res.statusText}`);
+    if (attempt >= FETCH_RETRIES || !isRetryable(res.status)) throw lastErr;
+
+    // Honour an explicit Retry-After when the upstream sends one, but never
+    // block a request handler for longer than the fetch timeout itself.
+    const after = Number(res.headers.get("retry-after"));
+    if (Number.isFinite(after) && after > 0) {
+      await sleep(Math.min(after * 1000, FETCH_TIMEOUT_MS));
+    }
   }
-  if (!res.ok) {
-    throw new Error(`Polymarket API ${path} -> ${res.status} ${res.statusText}`);
-  }
-  return (await res.json()) as T;
+
+  throw lastErr ?? new Error(`Polymarket API ${path} failed`);
 }
 
 export interface PmLeaderboardEntry {
