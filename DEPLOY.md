@@ -40,8 +40,31 @@ Your `.env` files are git-ignored, so no secrets are pushed. Good.
    | `NOWPAYMENTS_IPN_SECRET` | *(optional)* live NOWPayments IPN secret |
 
    `PORT`, `NODE_ENV`, and `NOWPAYMENTS_API_URL` are set automatically by the blueprint.
-3. Deploy. The build runs `prisma generate` + `prisma db push` (creates tables on Neon) + `tsc`.
+3. Deploy. The build runs `prisma generate` + `prisma migrate deploy` + `tsc`.
    Health check is `GET /api/health`. Note the service URL.
+
+### One-time: baseline the database (REQUIRED before the next deploy)
+
+The schema was originally created with `prisma db push`, which leaves no
+migration history. The build now uses `prisma migrate deploy`, which will try to
+apply `0_init` to a database whose tables already exist and fail with
+"relation already exists". Tell Prisma the initial migration is already applied —
+**once**, from your machine, before pushing the next deploy:
+
+```bash
+cd server
+# DATABASE_URL must point at the SAME database Render uses.
+npx prisma migrate resolve --applied 0_init
+```
+
+This writes a single row to `_prisma_migrations`. It creates, alters and drops
+nothing. Verify with `npx prisma migrate status` — it should report the database
+is up to date.
+
+**From then on**, schema changes go: edit `schema.prisma` → `npx prisma migrate
+dev --name <what-changed>` locally → commit the generated folder in
+`server/prisma/migrations/`. Render applies it on deploy. Never run `db push`
+against production again.
 
 > Render's free tier **sleeps after ~15 min idle**, so the first request after that takes
 > ~30–60s to wake. Fine for launch; upgrade to a paid instance to keep it always-on.

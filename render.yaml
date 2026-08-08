@@ -8,9 +8,13 @@ services:
     rootDir: server
     plan: free
     # --include=dev is required: NODE_ENV=production makes npm skip devDependencies,
-    # but the build needs TypeScript + @types/* to compile. prisma generate builds
-    # the client; db push creates/updates tables; then tsc compiles to dist/.
-    buildCommand: npm install --include=dev && npx prisma generate && npx prisma db push && npm run build
+    # but the build needs TypeScript + @types/* to compile.
+    #
+    # `migrate deploy`, never `db push`: db push reconciles drift by altering and
+    # dropping, which on a database holding real users is a data-loss waiting to
+    # happen. migrate deploy only applies committed, reviewed migration files and
+    # refuses anything it does not recognise.
+    buildCommand: npm install --include=dev && npx prisma generate && npx prisma migrate deploy && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
