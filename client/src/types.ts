@@ -61,14 +61,6 @@ export interface DailyPoint {
   netCash: number;
 }
 
-export interface Snapshot {
-  takenAt: string;
-  totalProfit: number;
-  winRate: number | null;
-  portfolioValue: number;
-  totalTrades: number;
-}
-
 export interface SmartMoneyMarket {
   conditionId: string;
   title: string;
@@ -119,7 +111,9 @@ export interface TraderDetails {
 
 export interface TraderResponse {
   cached: boolean;
-  indexing?: boolean; // true while the wallet's older history is still backfilling
+  /** Wallet has more history than one bounded read can cover; figures are
+   *  based on its most recent activity. Not a transient state. */
+  indexing?: boolean;
   stats: TraderStats;
 }
 

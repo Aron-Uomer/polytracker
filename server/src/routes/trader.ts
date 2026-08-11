@@ -2,7 +2,6 @@ import { Router } from "express";
 import { prisma, withDb, DB_ENABLED } from "../db.js";
 import { computeTraderStats, computeTraderQuick, type TraderStats } from "../stats.js";
 import { getActivityStats } from "../polymarket.js";
-import { getActivityStatsFromDb, indexWallet, type IndexState } from "../indexer.js";
 import { once } from "../inflight.js";
 import { publicDetail } from "../errors.js";
 
@@ -11,48 +10,8 @@ export const traderRouter = Router();
 const CACHE_TTL_SECONDS = Number(process.env.CACHE_TTL_SECONDS ?? 300);
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
-// A snapshot exists to chart a trend, not to record every page view. Without a
-// floor here a wallet that's polled (or is mid-backfill, so it never serves from
-// cache) writes a row per request and the table grows without bound.
-const SNAPSHOT_MIN_INTERVAL_MS =
-  Number(process.env.SNAPSHOT_MIN_INTERVAL_SECONDS ?? 3600) * 1000;
-const SNAPSHOT_RETENTION = Number(process.env.SNAPSHOT_RETENTION ?? 500);
-
-/** Append a history snapshot, throttled and pruned to a bounded retention. */
-async function snapshot(db: typeof prisma, address: string, stats: TraderStats) {
-  const last = await db.statSnapshot.findFirst({
-    where: { traderAddress: address },
-    orderBy: { takenAt: "desc" },
-    select: { takenAt: true },
-  });
-  if (last && Date.now() - last.takenAt.getTime() < SNAPSHOT_MIN_INTERVAL_MS) return;
-
-  await db.statSnapshot.create({
-    data: {
-      traderAddress: address,
-      portfolioValue: stats.portfolioValue,
-      totalProfit: stats.totalProfit,
-      winRate: stats.winRate,
-      totalTrades: stats.totalTrades,
-    },
-  });
-
-  // Drop anything past the retention window (cheap: runs at most once per
-  // interval per wallet, and only ever trims one row in the steady state).
-  const total = await db.statSnapshot.count({ where: { traderAddress: address } });
-  if (total > SNAPSHOT_RETENTION) {
-    const stale = await db.statSnapshot.findMany({
-      where: { traderAddress: address },
-      orderBy: { takenAt: "desc" },
-      skip: SNAPSHOT_RETENTION,
-      select: { id: true },
-    });
-    await db.statSnapshot.deleteMany({ where: { id: { in: stale.map((s) => s.id) } } });
-  }
-}
-
-/** Upsert the cached trader row + a history snapshot (no-op without a database). */
-async function persist(address: string, stats: TraderStats, idx: IndexState | null) {
+/** Upsert the cached stats row (no-op without a database). */
+async function persist(address: string, stats: TraderStats) {
   await withDb(async (db) => {
     const row = {
       name: stats.profile.name,
@@ -70,21 +29,24 @@ async function persist(address: string, stats: TraderStats, idx: IndexState | nu
       losses: stats.losses,
       winRate: stats.winRate,
       payload: stats as unknown as object,
-      idxNewestTs: idx?.newestTs ?? null,
-      idxOldestTs: idx?.oldestTs ?? null,
-      idxComplete: idx?.complete ?? false,
-      idxUpdatedAt: idx ? new Date() : null,
     };
     await db.trader.upsert({
       where: { address },
       create: { address, ...row },
       update: { ...row, lastFetchedAt: new Date() },
     });
-    await snapshot(db, address, stats);
   });
 }
 
-/** Live path: bounded fetch of trade history (used when there's no database). */
+/**
+ * Compute stats from a live, bounded read of the activity feed.
+ *
+ * `capped` means the wallet has more history than one pass can read
+ * (TRADES_MAX_PAGES x 500 events, or the wall-clock budget, whichever comes
+ * first). There is no longer a background backfill that closes that gap, so a
+ * capped wallet stays capped — the figures cover its most recent activity and
+ * the UI must say so rather than promise they will firm up.
+ */
 async function computeLive(address: string) {
   const activity = await getActivityStats(address);
   const stats = await computeTraderStats(address, activity);
@@ -98,39 +60,25 @@ interface TraderPayload {
 }
 
 /**
- * Serves cached stats if fresh; otherwise indexes the wallet's trades into the
- * DB (incrementally) and computes exact stats from it. Falls back to a bounded
- * live fetch if no database is configured or the DB is unreachable.
+ * Serves the cached stats row if it is still fresh, otherwise recomputes from a
+ * live read and caches the result.
+ *
+ * The Trade table this used to index into is gone: it stored every trade of
+ * every wallet ever searched and grew without bound. Only the computed stats
+ * are cached now, keyed by wallet, which is a fixed cost per address rather
+ * than one proportional to how much that wallet has traded.
  */
 async function loadTrader(address: string, forceRefresh: boolean): Promise<TraderPayload> {
-  if (DB_ENABLED) {
+  if (DB_ENABLED && !forceRefresh) {
     const cached = await withDb((db) => db.trader.findUnique({ where: { address } }));
-    if (cached && !forceRefresh) {
-      const ageMs = Date.now() - cached.lastFetchedAt.getTime();
-      // Serve cache only when fresh AND the backfill is finished (so we keep
-      // making progress on partially-indexed whales).
-      if (ageMs < CACHE_TTL_SECONDS * 1000 && cached.idxComplete) {
-        return {
-          cached: true,
-          indexing: false,
-          stats: cached.payload as unknown as TraderStats,
-        };
-      }
-    }
-
-    try {
-      const idx = await indexWallet(prisma, address);
-      const activity = await getActivityStatsFromDb(prisma, address, idx.complete);
-      const stats = await computeTraderStats(address, activity);
-      await persist(address, stats, idx);
-      return { cached: false, indexing: !idx.complete, stats };
-    } catch (dbErr) {
-      console.warn("[trader] DB/index path failed, falling back to live:", dbErr);
+    if (cached && Date.now() - cached.lastFetchedAt.getTime() < CACHE_TTL_SECONDS * 1000) {
+      const stats = cached.payload as unknown as TraderStats;
+      return { cached: true, indexing: stats.tradesCapped, stats };
     }
   }
 
   const { stats, indexing } = await computeLive(address);
-  await persist(address, stats, null);
+  await persist(address, stats);
   return { cached: false, indexing, stats };
 }
 
@@ -182,19 +130,6 @@ traderRouter.get("/:address/summary", async (req, res) => {
   }
 });
 
-/** GET /api/trader/:address/history — snapshots for charting over time. */
-traderRouter.get("/:address/history", async (req, res) => {
-  const address = req.params.address?.toLowerCase();
-  if (!ADDRESS_RE.test(address)) {
-    return res.status(400).json({ error: "Invalid wallet address." });
-  }
-  const snapshots =
-    (await withDb((db) =>
-      db.statSnapshot.findMany({
-        where: { traderAddress: address },
-        orderBy: { takenAt: "asc" },
-        take: 500,
-      })
-    )) ?? [];
-  return res.json({ snapshots });
-});
+// GET /:address/history is gone with StatSnapshot. Charting a trend over time
+// requires storing figures over time, and that store is exactly the unbounded
+// growth this change set removes.

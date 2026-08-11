@@ -33,7 +33,7 @@ import { SearchBox } from "./components/SearchBox";
 import { SmartMoney } from "./components/SmartMoney";
 import { Compare } from "./components/Compare";
 import { ProGate } from "./components/ProGate";
-import { ActivityCalendar, PnlHistory } from "./components/Charts";
+import { ActivityCalendar } from "./components/Charts";
 import {
   SearchIcon,
   TrophyIcon,
@@ -465,10 +465,13 @@ export default function App() {
 
             {stats && !error && (
               <section className="animate-fadeUp mt-8 space-y-6 pb-16">
+                {/* No background backfill exists any more, so this is a
+                    permanent property of very active wallets, not a wait. */}
                 {indexing && (
-                  <div className="flex items-center gap-2 rounded-xl border border-premium/40 bg-premium/10 px-4 py-2.5 text-sm text-premium">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-premium" />
-                    Still indexing this wallet's older history counts will firm up. Refresh in a moment.
+                  <div className="flex items-center gap-2 border border-premium/40 bg-premium/10 px-4 py-2.5 text-sm text-premium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-premium" />
+                    This wallet has more history than one read can cover — figures below
+                    are based on its most recent {stats.totalTrades.toLocaleString()} trades.
                   </div>
                 )}
 
@@ -493,10 +496,7 @@ export default function App() {
                   <StatCard label="Portfolio Value" value={usd(stats.portfolioValue)} sub={`${stats.openPositionsCount} open positions`} />
                 </div>
 
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <PnlHistory key={`pnl-${stats.address}`} address={stats.address} />
-                  <ActivityCalendar key={`cal-${stats.address}`} daily={stats.dailySeries} />
-                </div>
+                <ActivityCalendar key={`cal-${stats.address}`} daily={stats.dailySeries} />
 
                 <DetailsPanel stats={stats} />
 

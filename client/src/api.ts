@@ -8,7 +8,6 @@ import type {
   Plan,
   SmartMoneyFilters,
   SmartMoneyResult,
-  Snapshot,
   TraderResponse,
   TraderSummary,
   WatchlistState,
@@ -207,12 +206,6 @@ export async function setPlan(plan: Plan): Promise<WatchlistState> {
     body: JSON.stringify({ plan }),
   });
   return readState(res, "Could not change your plan");
-}
-
-export async function fetchHistory(address: string): Promise<Snapshot[]> {
-  const res = await fetch(`${API_BASE}/api/trader/${address}/history`);
-  if (!res.ok) return [];
-  return (await res.json()).snapshots ?? [];
 }
 
 export async function fetchSmartMoney(f: SmartMoneyFilters): Promise<SmartMoneyResult> {

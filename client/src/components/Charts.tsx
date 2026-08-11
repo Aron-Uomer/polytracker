@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { fetchHistory } from "../api";
-import type { DailyPoint, Snapshot } from "../types";
+import { useMemo, useState } from "react";
+import type { DailyPoint } from "../types";
 import { usd } from "../format";
 import { ChevronLeft, ChevronRight } from "./icons";
 
@@ -136,59 +135,5 @@ function NavBtn({
     >
       {children}
     </button>
-  );
-}
-
-/* ------------------------------ P&L history -------------------------------- */
-
-export function PnlHistory({ address }: { address: string }) {
-  const [snaps, setSnaps] = useState<Snapshot[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchHistory(address).then((s) => !cancelled && setSnaps(s));
-    return () => {
-      cancelled = true;
-    };
-  }, [address]);
-
-  return (
-    <div className="glass rounded-xl p-4">
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
-        P&amp;L history
-      </h3>
-      {snaps === null ? (
-        <div className="shimmer h-24 rounded-lg" />
-      ) : snaps.length < 2 ? (
-        <div className="flex h-24 items-center justify-center px-4 text-center text-xs text-muted">
-          P&amp;L history builds as the wallet is re-checked over time (needs the database).
-          Come back later to see the trend.
-        </div>
-      ) : (
-        <Line points={snaps.map((s) => s.totalProfit)} />
-      )}
-    </div>
-  );
-}
-
-function Line({ points }: { points: number[] }) {
-  const W = 600;
-  const H = 96;
-  const min = Math.min(...points, 0);
-  const max = Math.max(...points, 0);
-  const range = max - min || 1;
-  const x = (i: number) => (i / (points.length - 1)) * W;
-  const y = (v: number) => H - ((v - min) / range) * H;
-  const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)} ${y(p).toFixed(1)}`).join(" ");
-  const up = points[points.length - 1] >= points[0];
-  const stroke = up ? "#34d399" : "#f87171";
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-24 w-full" preserveAspectRatio="none">
-      {min < 0 && max > 0 && (
-        <line x1={0} x2={W} y1={y(0)} y2={y(0)} stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-      )}
-      <path d={d} fill="none" stroke={stroke} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-    </svg>
   );
 }

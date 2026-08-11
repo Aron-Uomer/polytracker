@@ -34,56 +34,22 @@ model Trader {
   // everything from cache without recomputing.
   payload Json
 
-  // Background-indexer state: how far the wallet's trade history has been
-  // ingested into the Trade table. idxComplete = we've reached its first trade.
-  idxNewestTs  Int?
-  idxOldestTs  Int?
-  idxComplete  Boolean   @default(false)
-  idxUpdatedAt DateTime?
-
   lastFetchedAt DateTime @default(now())
   createdAt     DateTime @default(now())
-
-  snapshots StatSnapshot[]
 }
 
 /// One on-chain activity event (trade / redeem) for a wallet. Filled
 /// incrementally by the indexer so stats can be computed exactly and instantly
 /// from the database instead of re-fetching Polymarket on every lookup.
-model Trade {
-  id          String @id // deterministic dedup key (see indexer.eventId)
-  address     String
-  txHash      String
-  timestamp   Int // unix seconds
-  type        String // TRADE | REDEEM | REWARD | ...
-  side        String // BUY | SELL | "" for non-trades
-  conditionId String
-  asset       String
-  size        Float
-  usdcSize    Float
-  price       Float
-  title       String
-  slug        String
-  icon        String
-
-  @@index([address, timestamp])
-  @@index([address, conditionId])
-}
+// The Trade table is gone. It cached every trade of every wallet anyone ever
+// searched, forever: 196,243 rows across 8 wallets came to 226 MB, and it grew
+// without bound. Stats are now always computed from a live, bounded read of
+// Polymarket's activity feed. See the drop_trade_cache migration.
 
 /// Point-in-time snapshot used for charting a trader's history over time.
-model StatSnapshot {
-  id             Int      @id @default(autoincrement())
-  traderAddress  String
-  portfolioValue Float
-  totalProfit    Float
-  winRate        Float?
-  totalTrades    Int
-  takenAt        DateTime @default(now())
-
-  trader Trader @relation(fields: [traderAddress], references: [address], onDelete: Cascade)
-
-  @@index([traderAddress, takenAt])
-}
+// StatSnapshot is gone with the P&L history chart it backed. The activity
+// calendar is unaffected — it reads dailySeries, which comes from the live
+// trade walk rather than from stored snapshots.
 
 /// --- SaaS layer (wired for later: auth + saved wallets) ---
 
