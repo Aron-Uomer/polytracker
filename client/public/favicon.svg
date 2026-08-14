@@ -1,19 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="PolyTrack">
-  <!-- The PT plate from the rail: enamel chassis, bone frame, bone lettering.
-       Letters are drawn as rects rather than <text> so the mark is identical
-       on every platform and stays crisp at 16px — a favicon cannot depend on
-       Archivo being installed. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Whole Record">
+  <!-- The WR plate from the rail: enamel chassis, bone frame, bone lettering.
+       Stroked paths rather than the rects the old PT mark used — W needs
+       diagonals, and stroking keeps the joins clean at 16px where the
+       letterforms are only about seven pixels tall. Square caps to match the
+       machined language of the board. -->
   <rect width="32" height="32" fill="#14150F"/>
   <rect x="1" y="1" width="30" height="30" fill="none" stroke="#E8E3D6" stroke-width="2"/>
 
-  <g fill="#E8E3D6">
-    <!-- P -->
-    <rect x="6" y="10" width="3.4" height="13"/>
-    <rect x="6" y="10" width="7.6" height="3.4"/>
-    <rect x="10.2" y="10" width="3.4" height="6.6"/>
-    <rect x="6" y="13.2" width="7.6" height="3.4"/>
-    <!-- T -->
-    <rect x="15.8" y="10" width="10.2" height="3.4"/>
-    <rect x="19.2" y="10" width="3.4" height="13"/>
+  <g fill="none" stroke="#E8E3D6" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter">
+    <!-- W -->
+    <path d="M5.6 11 L8 21.6 L10.4 15 L12.8 21.6 L15.2 11"/>
+    <!-- R: squared bowl, no curve, so it stays crisp when scaled down -->
+    <path d="M19 21.6 V11 H25 V16.4 H19"/>
+    <path d="M22 16.4 L25.8 21.6"/>
   </g>
 </svg>

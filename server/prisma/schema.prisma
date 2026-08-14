@@ -1,4 +1,4 @@
-// Prisma schema for PolyTrack
+// Prisma schema for Whole Record
 // Postgres is the production target. See server/.env.example for DATABASE_URL.
 
 generator client {

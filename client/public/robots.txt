@@ -1,4 +1,4 @@
-# PolyTrack — all public pages are crawlable.
+# Whole Record — all public pages are crawlable.
 User-agent: *
 Allow: /
 

@@ -118,5 +118,5 @@ process.on("uncaughtException", (err) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`PolyTrack API listening on http://localhost:${PORT}`);
+  console.log(`Whole Record API listening on http://localhost:${PORT}`);
 });

@@ -1,4 +1,4 @@
-# PolyTrack
+# Whole Record
 
 Track and display any Polymarket trader's stats — **win rate, total P&L, today's P&L,
 number of trades, traded volume, portfolio value, and open/resolved positions** — just
@@ -13,7 +13,7 @@ Built as the foundation for a SaaS: React frontend, Node/Express API, and Postgr
 (via Prisma) for caching, history, and user accounts.
 
 ```
-polytrack/
+wholerecord/
 ├── client/   React + Vite + TypeScript + Tailwind (the dashboard UI)
 ├── server/   Express + TypeScript API + Prisma (Polymarket fetch, stats, caching)
 └── package.json   run both together in dev
@@ -51,7 +51,7 @@ on one trader doesn't multiply into a burst of Polymarket requests.
 
 The public REST endpoints cap deep pagination, and the live `/activity` feed can return
 truncated pages — so for very active wallets, on-request fetching is both slow and a little
-unreliable. With a `DATABASE_URL` set, PolyTrack instead **indexes each wallet's trades into
+unreliable. With a `DATABASE_URL` set, Whole Record instead **indexes each wallet's trades into
 a `Trade` table** and computes stats from there:
 
 - **Incremental:** a forward fill grabs only new trades since the last visit; a backward fill
@@ -69,7 +69,7 @@ live since they're cheap single calls; only the historical trade aggregation is 
 ### 1. Install everything
 
 ```bash
-cd polytrack
+cd wholerecord
 npm run install:all
 ```
 

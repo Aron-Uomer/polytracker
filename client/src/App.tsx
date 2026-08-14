@@ -322,14 +322,17 @@ export default function App() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
           <button
             onClick={() => navTo("home")}
-            aria-label="PolyTrack home"
-            className="group flex items-center gap-2.5"
+            aria-label="Whole Record home"
+            className="group flex min-w-0 items-center gap-2.5"
           >
-            <span className="border border-bone/35 px-[7px] py-[3px] font-display text-[11px] font-bold uppercase leading-none tracking-plate text-bone transition group-hover:border-lamp group-hover:text-lamp">
-              PT
+            <span className="shrink-0 border border-bone/35 px-[7px] py-[3px] font-display text-[11px] font-bold uppercase leading-none tracking-plate text-bone transition group-hover:border-lamp group-hover:text-lamp">
+              WR
             </span>
-            <span className="font-display text-[15px] font-bold uppercase leading-none tracking-plate text-bone">
-              Polytrack
+            {/* Three characters longer than the old mark, and at 342px the rail
+                also carries the account control and the menu lever — so the
+                wordmark steps down rather than pushing them off the edge. */}
+            <span className="whitespace-nowrap font-display text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-bone min-[400px]:text-[13px] sm:text-[15px] sm:tracking-plate">
+              Whole Record
             </span>
           </button>
 
@@ -558,7 +561,7 @@ export default function App() {
       <footer className="rail border-t border-board-rule">
         <div className="mx-auto max-w-7xl px-4 py-7">
           <p className="font-display text-[10px] font-medium uppercase tracking-plate text-bone-dim sm:text-[11px]">
-            PolyTrack · Data from Polymarket's public API · Informational only
+            Whole Record · Data from Polymarket's public API · Informational only
           </p>
         </div>
       </footer>

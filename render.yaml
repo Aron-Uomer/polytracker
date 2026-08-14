@@ -1,8 +1,18 @@
-# Render Blueprint for the PolyTrack API (Express server in server/).
+# Render Blueprint for the Whole Record API (Express server in server/).
 # In Render: New → Blueprint → point at this repo. Set the secret env vars
 # (marked sync:false) in the dashboard after the service is created.
 services:
   - type: web
+    # Deliberately still `polytrack-api` after the rename to Whole Record.
+    # Render identifies services by name: changing it here does not rename the
+    # existing service, it provisions a NEW one on a NEW hostname. That would
+    # mean updating API_PUBLIC_URL, CORS_ORIGIN, APP_URL and Vercel's
+    # VITE_API_BASE in lockstep, re-adding the origin in Google Cloud Console,
+    # and re-pointing the NOWPayments IPN callback — with payments silently
+    # failing to grant Pro in the window where they disagree.
+    #
+    # The name is internal; nothing a visitor sees contains it. Rename it only
+    # as a deliberate migration, not as part of a find-and-replace.
     name: polytrack-api
     runtime: node
     rootDir: server
@@ -28,7 +38,7 @@ services:
         sync: false
       - key: AUTH_SECRET # a long random string
         sync: false
-      - key: CORS_ORIGIN # your Vercel frontend URL, e.g. https://polytrack.vercel.app
+      - key: CORS_ORIGIN # your Vercel frontend URL, e.g. https://wholerecord.vercel.app
         sync: false
       - key: APP_URL # same as CORS_ORIGIN (used for checkout redirects)
         sync: false

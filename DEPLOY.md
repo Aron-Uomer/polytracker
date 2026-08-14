@@ -1,4 +1,4 @@
-# Deploying PolyTrack
+# Deploying Whole Record
 
 Architecture: **Vercel** (frontend) + **Render** (API) + **Neon** (Postgres, already set up).
 The frontend and API deploy as two separate services, each with its own env vars.
@@ -7,14 +7,14 @@ The frontend and API deploy as two separate services, each with its own env vars
 
 ## 0. Push to GitHub (one time)
 
-Deploys pull from a Git repo. From the `polytrack/` folder:
+Deploys pull from a Git repo. From the `wholerecord/` folder:
 
 ```bash
 git init
 git add .
-git commit -m "PolyTrack"
+git commit -m "Whole Record"
 git branch -M main
-git remote add origin https://github.com/<you>/polytrack.git
+git remote add origin https://github.com/<you>/wholerecord.git
 git push -u origin main
 ```
 
@@ -26,6 +26,14 @@ Your `.env` files are git-ignored, so no secrets are pushed. Good.
 
 1. In [Render](https://render.com) → **New → Blueprint** → connect this repo. Render reads
    `render.yaml` and creates the **polytrack-api** web service (root dir `server/`).
+
+   > The service is still named `polytrack-api` after the rename to Whole Record. Render
+   > identifies services by name, so changing it provisions a *new* service on a *new*
+   > hostname rather than renaming this one — which means updating `API_PUBLIC_URL`,
+   > `CORS_ORIGIN`, `APP_URL` and Vercel's `VITE_API_BASE` together, re-adding the origin in
+   > Google Cloud Console, and re-pointing the NOWPayments IPN callback. Payments would
+   > silently fail to grant Pro in any window where those disagree. The name is internal —
+   > no visitor ever sees it.
 2. Open the service → **Environment** and set the secret vars (the `sync:false` ones):
 
    | Var | Value |
@@ -83,7 +91,7 @@ against production again.
    | `VITE_API_BASE` | your Render API URL, e.g. `https://polytrack-api.onrender.com` |
    | `VITE_GOOGLE_CLIENT_ID` | *(optional)* same Google client id as the server |
 
-4. Deploy. Note the Vercel URL (e.g. `https://polytrack.vercel.app`).
+4. Deploy. Note the Vercel URL (e.g. `https://wholerecord.vercel.app`).
 
 ### Security headers
 
@@ -130,7 +138,7 @@ Now that you have both URLs, close the loop:
 ## 4. Provider settings for production
 
 - **Google sign-in:** in Google Cloud Console → your OAuth client → **Authorized JavaScript
-  origins**, add your Vercel URL (e.g. `https://polytrack.vercel.app`). Move the OAuth consent
+  origins**, add your Vercel URL (e.g. `https://wholerecord.vercel.app`). Move the OAuth consent
   screen to **In production** (or keep test users).
 - **NOWPayments (live):** switch to your live API key + IPN secret, keep
   `NOWPAYMENTS_API_URL=https://api.nowpayments.io/v1`, and make sure `API_PUBLIC_URL` is your

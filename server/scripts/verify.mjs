@@ -1,7 +1,7 @@
-// PolyTrack change verification. Spawns the built server in several
+// Whole Record change verification. Spawns the built server in several
 // configurations, asserts behaviour, prints a PASS/FAIL table.
 //
-//   cd polytrack && npm run build
+//   cd wholerecord && npm run build
 //   npm --prefix server run verify
 //
 // Runs entirely in-memory (DATABASE_URL blanked) — never touches your database.

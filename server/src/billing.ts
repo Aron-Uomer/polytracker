@@ -92,7 +92,7 @@ export async function createInvoice(user: AuthUser): Promise<string> {
     price_amount: PRO_PRICE_USD,
     price_currency: "usd",
     order_id: `${user.id}:${Date.now()}`,
-    order_description: `PolyTrack Pro (${PRO_DAYS} days)`,
+    order_description: `Whole Record Pro (${PRO_DAYS} days)`,
     ipn_callback_url: API_PUBLIC_URL ? `${API_PUBLIC_URL}/api/billing/webhook` : undefined,
     success_url: `${APP_URL}/#/watchlist?checkout=success`,
     cancel_url: `${APP_URL}/#/watchlist?checkout=cancel`,

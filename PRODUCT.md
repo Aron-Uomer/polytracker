@@ -20,7 +20,7 @@ set of wallets over time via the watchlist.
 
 Polymarket publishes profit and volume, which are easy to misread: a wallet can look
 profitable off one lucky resolution, and open positions say nothing about what a trader
-already exited. PolyTrack reconstructs a wallet's full record — win rate, realized and
+already exited. Whole Record reconstructs a wallet's full record — win rate, realized and
 unrealized P&L, position-by-position history — so a visitor can judge skill rather than
 headline profit. Success is a visitor deciding, with justified confidence, whether a wallet
 is worth following.
@@ -42,7 +42,7 @@ Visitors arrive with a raw `0x…` address or a username pasted from elsewhere, 
 mobile, often mid-conversation. Evaluation is comparative and repeated: check a wallet,
 compare it against another, keep the good ones on a list. Data originates from Polymarket's
 public APIs (`lb-api.polymarket.com` for profit/volume, `data-api.polymarket.com` for
-positions and activity); PolyTrack owns no proprietary market data.
+positions and activity); Whole Record owns no proprietary market data.
 
 ## Capabilities and Constraints
 
@@ -65,7 +65,7 @@ Undecided: whether cached/aggregate data will ever be served at build time.
 
 ## Brand Commitments
 
-Name: **PolyTrack**. No logo asset, wordmark file, or written brand guideline exists.
+Name: **Whole Record**. No logo asset, wordmark file, or written brand guideline exists.
 Nothing about the current visual treatment has been declared binding.
 
 ## Evidence on Hand

@@ -1,5 +1,5 @@
 {
-  "name": "polytrack",
+  "name": "wholerecord",
   "version": "0.1.0",
   "private": true,
   "description": "Track and display Polymarket trader stats by wallet address",
