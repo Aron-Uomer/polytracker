@@ -45,6 +45,16 @@ import {
   XIcon,
 } from "./components/icons";
 import { SplitFlap, BoardRow } from "./components/Board";
+import { initAnalytics, pageview, track } from "./analytics";
+
+/** Hash routes reported to analytics as real paths — see analytics.ts. */
+const ANALYTICS_PATH: Record<Route, string> = {
+  home: "/",
+  leaderboard: "/leaderboard",
+  watchlist: "/watchlist",
+  smart: "/smart-money",
+  compare: "/compare",
+};
 
 type Route = "home" | "leaderboard" | "watchlist" | "smart" | "compare";
 
@@ -119,6 +129,7 @@ export default function App() {
       .catch((e) => console.warn("watchlist:", e instanceof Error ? e.message : e));
 
   useEffect(() => {
+    initAnalytics();
     refreshWatch();
     fetchMe().then(setUser).catch(() => {});
     getBillingConfig().then(setBilling).catch(() => {});
@@ -146,6 +157,9 @@ export default function App() {
   async function onAuthed(u: AuthUser) {
     setUser(u);
     setAuthOpen(false);
+    // The modal handles both register and login, and doesn't report which, so
+    // this is deliberately the generic event rather than a guessed sign_up.
+    track("login", { had_pending_track: Boolean(pendingTrack.current) });
 
     const pending = pendingTrack.current;
     pendingTrack.current = null;
@@ -175,6 +189,9 @@ export default function App() {
     setError(null);
     setQuick(null);
     setStats(null);
+    // The core action. Kept as an event rather than a URL so the wallet can be
+    // aggregated instead of shredding page reports into one row per address.
+    track("wallet_lookup", { wallet: addr.toLowerCase(), refresh });
 
     // Both go out at once. The summary needs no trade-history paging and lands
     // in about a second; the full lookup can take 30s on an unindexed wallet.
@@ -208,6 +225,13 @@ export default function App() {
     }
   }
 
+  // One page_view per route change. Without this GA sees a single URL for the
+  // entire app, because the hash never reaches location.pathname.
+  useEffect(() => {
+    const path = trader ? "/trader" : ANALYTICS_PATH[route];
+    pageview(path);
+  }, [route, trader]);
+
   // URL is the source of truth for which trader is shown.
   useEffect(() => {
     if (route !== "home") return;
@@ -235,6 +259,8 @@ export default function App() {
       return { ok: false, authRequired: true, error: "Sign in to track a wallet." };
     }
     const res = await addWatch(addr);
+    if (res.ok) track("add_to_watchlist", { wallet: addr.toLowerCase() });
+    else if (res.upgradeRequired) track("watchlist_limit_hit", { plan: watch?.plan });
     if (res.state) setWatch(res.state);
     // Token expired or was revoked server-side — same prompt, same recovery.
     if (!res.ok && res.authRequired) {
@@ -258,6 +284,9 @@ export default function App() {
     }
     if (billing.enabled) {
       try {
+        // Fired before the redirect: once we hand off to NOWPayments the page
+        // is gone, and an event queued after this line would never send.
+        track("begin_checkout", { value: billing.price, currency: "USD" });
         window.location.href = await startCheckout(); // NOWPayments hosted invoice
       } catch (e) {
         setFlash(e instanceof Error ? e.message : "Could not start checkout.");

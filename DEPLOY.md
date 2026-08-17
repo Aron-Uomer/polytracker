@@ -90,8 +90,49 @@ against production again.
    | --- | --- |
    | `VITE_API_BASE` | your Render API URL, e.g. `https://polytrack-api.onrender.com` |
    | `VITE_GOOGLE_CLIENT_ID` | *(optional)* same Google client id as the server |
+   | `VITE_GA_ID` | *(optional)* GA4 measurement id, `G-XXXXXXXXXX` — see below |
 
 4. Deploy. Note the Vercel URL (e.g. `https://wholerecord.vercel.app`).
+
+### Google Analytics
+
+1. [analytics.google.com](https://analytics.google.com) → **Admin → Create → Property**. Name it
+   Whole Record, pick your timezone and currency.
+2. Choose **Web** as the platform and enter your site URL. Google issues a **measurement id**
+   shaped `G-XXXXXXXXXX` — that is the only value you need.
+3. Set `VITE_GA_ID` to it in Vercel → **Settings → Environment Variables**, then redeploy.
+   Vite bakes env vars in at build time, so **adding the variable does nothing until you
+   redeploy**.
+4. Verify in GA4 under **Reports → Realtime** while loading the live site in another tab.
+
+Leaving `VITE_GA_ID` unset loads no script and sets no cookie. Analytics is also off on the
+dev server even when the id is present, so local clicking never pollutes the property.
+
+**Why this isn't just the copy-paste snippet.** The app uses hash routing, so
+`location.pathname` is always `/` — the standard gtag snippet would file the landing page,
+the leaderboard and every trader page under one URL. `client/src/analytics.ts` sends a
+synthetic path per route instead (`/`, `/trader`, `/leaderboard`, `/smart-money`,
+`/compare`, `/watchlist`), with `send_page_view: false` on the config call so views aren't
+double-counted.
+
+Events sent beyond page views:
+
+| Event | When | Parameters |
+| --- | --- | --- |
+| `wallet_lookup` | a wallet is searched — the core action | `wallet`, `refresh` |
+| `login` | sign-in or registration succeeds | `had_pending_track` |
+| `add_to_watchlist` | a wallet is tracked | `wallet` |
+| `watchlist_limit_hit` | the free cap blocks a track — upgrade intent | `plan` |
+| `begin_checkout` | before redirecting to NOWPayments | `value`, `currency` |
+
+`wallet` is an event parameter rather than part of the URL on purpose: as a path it would
+give every address its own page and shred the reports into thousands of single-visit rows.
+To break events down by wallet, register it as a custom dimension in **Admin → Custom
+definitions**.
+
+> **Consent.** GA4 sets cookies, and there is no cookie banner on the site. If you expect
+> visitors in the EU/UK, that is a GDPR question worth answering before you drive traffic.
+> Vercel Analytics is cookieless and needs no banner, if you would rather avoid it.
 
 ### Security headers
 
