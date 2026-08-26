@@ -1,239 +1,249 @@
 # Rate limiting
 
-Implementation: [`server/src/ratelimit.ts`](server/src/ratelimit.ts) (~60 lines, no dependency).
-Configuration: [`server/src/index.ts`](server/src/index.ts).
+The code: [`server/src/ratelimit.ts`](server/src/ratelimit.ts) — about 60 lines.
+Where the limits are set: [`server/src/index.ts`](server/src/index.ts).
 
 ---
 
-## Why it exists
+## What it does
 
-Two distinct threats, not one.
+It counts how many requests each visitor makes, and blocks them if they make too many too
+fast.
 
-**Amplification.** A single request to `/api/trader/:address` can fan out to roughly fifty
-calls to Polymarket's public API — up to forty pages of the activity feed, several pages of
-positions, three leaderboard calls, one value call. A client sending 100 cheap-looking
-requests turns into ~5,000 requests upstream. The limiter protects Polymarket's goodwill as
-much as it protects this server; getting IP-banned by the only data source would end the
-product.
-
-**Credential stuffing.** `/api/auth/login` is an unauthenticated endpoint that compares a
-password. Without a cap it is a free oracle for anyone with a leaked-credential list.
-
-A third, quieter reason: this runs on a 512 MB Render instance with one process. Unbounded
-concurrent whale lookups will exhaust it long before they exhaust the network.
+Think of a bouncer with a clicker. Every time you walk in, he clicks. If you've come in more
+than 30 times this minute, he stops you at the door until the minute is up.
 
 ---
 
-## The mechanism
+## Why we need it
 
-A **fixed-window counter**, held in a `Map` in process memory.
+**Reason 1: one request to us becomes fifty requests to Polymarket.**
 
-```ts
-interface Bucket { count: number; resetAt: number; }
-const buckets = new Map<string, Bucket>();   // "name|ip" -> Bucket
+When someone looks up a wallet, our server has to ask Polymarket for the data. Not once —
+about fifty times, because it walks through the wallet's trade history page by page.
+
+So if one person sends us 100 requests, we send Polymarket 5,000. Do that for long and
+Polymarket blocks our server. We'd have no data at all, and the site would be dead. The rate
+limit protects our relationship with them as much as it protects us.
+
+**Reason 2: stopping password guessing.**
+
+Anyone can hit the login endpoint without an account. Without a limit, someone could try
+millions of email and password combinations until one works. With a limit, they get 20 tries
+every 15 minutes, which makes that pointless.
+
+There's also a third, smaller reason: our server has 512 MB of memory. Too many big lookups
+at once will run it out of memory before it runs out of anything else.
+
+---
+
+## How it works
+
+The server keeps a list in memory. Each entry is one visitor's counter for one part of the
+site:
+
+```
+"trader|203.0.113.7"   ->  { count: 12, resetAt: 3:05:00pm }
 ```
 
-Every request through a limiter does five things:
+That reads as: *the visitor at 203.0.113.7 has made 12 trader requests, and their count goes
+back to zero at 3:05pm.*
 
-1. **Builds a key**: `` `${opts.name}|${req.ip}` ``, e.g. `trader|203.0.113.7`.
-   The `name` prefix is what allows several limiters to count the same IP independently —
-   exhausting `/api/trader` must not lock a visitor out of signing in.
+When a request comes in:
 
-2. **Finds or creates the bucket.** If `resetAt` has already passed, the bucket is
-   *replaced*, not decremented. That single line is what makes the window fixed rather than
-   sliding, with the consequences described under [Known
-   characteristics](#known-characteristics).
+1. **Work out whose counter this is.** The key is the section name plus the visitor's IP
+   address. The section name matters — it means running out of trader lookups doesn't also
+   lock you out of logging in. Each section has its own counter.
 
-3. **Increments the counter.**
+2. **Find their counter, or start a new one.** If the reset time has already passed, we throw
+   the old counter away and start fresh at zero.
 
-4. **Sets headers** on every response, allowed or not:
-   `X-RateLimit-Limit`, `X-RateLimit-Remaining`.
+3. **Add one to the count.**
 
-5. **Decides.** Over the max → `429` with `Retry-After` (seconds, floor of 1) and a JSON
-   body carrying `error` and `retryAfter`. Otherwise `next()`.
+4. **Tell them where they stand.** Every response includes two headers:
+   `X-RateLimit-Limit` (your allowance) and `X-RateLimit-Remaining` (what's left).
 
-There is no store to run, no Redis, no sidecar. That is a deliberate fit to a single-instance
-deployment, not an oversight — see [Scaling past one instance](#scaling-past-one-instance).
+5. **Allow or block.** Under the limit, the request goes through. Over it, they get a `429`
+   response ("too many requests") and a `Retry-After` header saying how many seconds to wait.
+
+That's the whole thing. No database, no extra service to run. Just a list in memory.
 
 ---
 
 ## The limits
 
-Registered in `index.ts` in this order. Every `/api` request passes through the **global**
-limiter *and* its route limiter, so both budgets are consumed.
+| Part of the site | Allowance | Per |
+| --- | --- | --- |
+| Health check | unlimited | — |
+| Everything (overall cap) | 300 | minute |
+| Logging in / signing up | **20** | **15 minutes** |
+| Smart money | **10** | minute |
+| Trader lookup | **30** | minute |
+| Leaderboard | 60 | minute |
+| Watchlist | 60 | minute |
+| Account | 60 | minute |
+| Billing | 60 | minute |
 
-| Path | Limit | Window | Reasoning |
-| --- | --- | --- | --- |
-| `/api/health` | **none** | — | Registered *before* the limiters so the platform's probe can never trip one. A rate-limited health check would make Render mark the service unhealthy and restart it. |
-| *(global)* | 300 | 1 min | Backstop across everything, including paths with no specific limiter. |
-| `/api/auth` | **20** | **15 min** | Credential stuffing. The long window is the point: 20 attempts is generous for a person who forgot their password and near-useless for a bot. |
-| `/api/smart-money` | **10** | 1 min | Scans the top N traders' recent activity — the single most expensive endpoint in the API. |
-| `/api/trader` | **30** | 1 min | ~50 upstream calls per cold lookup. |
-| `/api/leaderboard` | 60 | 1 min | One upstream call, cacheable. |
-| `/api/watchlist` | 60 | 1 min | Small database reads and writes. |
-| `/api/me` | 60 | 1 min | Small database reads. |
-| `/api/billing` | 60 | 1 min | Covers both checkout and the IPN webhook — see the caveat below. |
+Every request counts against **two** limits: the overall 300/minute cap, and the limit for
+that specific section.
 
-### Why the numbers differ by two orders of magnitude
+### Why the numbers are so different
 
-They are set by **cost per request**, not by a uniform notion of politeness. A leaderboard
-call is one upstream request; a smart-money call is hundreds. Giving them the same budget
-would either strangle the cheap endpoints or leave the expensive one unprotected.
+The limits are based on **how expensive each request is**, not on being evenly fair.
 
-The auth window is the outlier and deliberately so. Every other limiter uses a one-minute
-window because it is defending a resource. Auth is defending a *secret*, and secrets are
-attacked slowly. A 20/minute cap would permit 28,800 guesses a day; 20 per fifteen minutes
-permits 1,920.
+- A **leaderboard** request is one call to Polymarket. Cheap. 60 a minute is fine.
+- A **trader lookup** is about fifty calls. 30 a minute is already 1,500 calls to Polymarket
+  from one person.
+- **Smart money** scans lots of traders at once. It's the most expensive thing we do, so it
+  gets the smallest allowance.
 
----
+### Why login is measured in 15 minutes, not 1
 
-## Middleware ordering
+Every other limit resets each minute. Login resets every 15.
 
-Order in `index.ts` is load-bearing:
+That's on purpose. The other limits are protecting a *resource* — bursts are fine as long as
+they don't last. Login is protecting a *password*, and someone guessing passwords is happy to
+go slowly.
 
-```
-trust proxy
-security headers
-CORS
-express.json({ limit: "64kb" })
-/api/health                     ← before the limiters, therefore exempt
-global limiter (300/min)
-per-route limiter + router
-```
+Here's the difference:
 
-Two consequences worth understanding:
+- 20 tries per **minute** = 28,800 guesses a day.
+- 20 tries per **15 minutes** = 1,920 guesses a day.
 
-- **Body parsing happens before limiting.** A rate-limited request still has its body parsed.
-  This is safe only because of the `64kb` cap on `express.json` — without that ceiling, an
-  attacker could make the server parse megabytes per request and never reach the limiter that
-  was supposed to stop them.
+Same number, very different protection. And if you've genuinely forgotten your password, 20
+tries is plenty.
 
-- **Health is exempt by position, not by configuration.** Moving that line below the global
-  limiter would silently make the platform's uptime probe consume the same budget as real
-  traffic.
+### Why the health check has no limit
 
-### `trust proxy` is part of the rate limiter
-
-```ts
-app.set("trust proxy", 1);
-```
-
-Render terminates TLS at a proxy. Without this line `req.ip` is the *proxy's* address, so
-every visitor on earth shares one bucket and the first busy minute locks out everybody.
-
-The `1` matters as much as the setting. It means "trust exactly one hop" — take the last
-entry in `X-Forwarded-For`, which the proxy itself appended. Trusting *all* hops
-(`trust proxy: true`) would let any client prepend a forged address to that header and get a
-fresh bucket per request, defeating the limiter entirely.
-
-**If you ever move off Render, re-check this number.** It is a property of the deployment
-topology, not of the code, and it is wrong by default on both a bare VPS (should be `false`)
-and behind two proxies (should be `2`).
+Render pings `/api/health` constantly to check the server is alive. If that ping ever got rate
+limited, Render would think the server was broken and restart it.
 
 ---
 
-## Memory safety
+## Two things that would break if you moved them
 
-The `buckets` map is bounded two ways, because a map keyed by client IP is a memory
-amplification vector in its own right:
+**1. The health check has to stay where it is.**
 
-```ts
-const MAX_BUCKETS = 50_000;
+In `index.ts`, the health check is written *above* the rate limiting code. That's the only
+reason it's unlimited. Move that line lower and Render's pings start counting against the
+limit — and eventually restart your server for no reason.
 
-function sweep(now) {
-  if (now - lastSweep < 60_000) return;   // at most once a minute
-  lastSweep = now;
-  for (const [key, b] of buckets) if (b.resetAt <= now) buckets.delete(key);
-  if (buckets.size > MAX_BUCKETS) buckets.clear();
-}
-```
+**2. `app.set("trust proxy", 1)` is part of the rate limiter.**
 
-**The sweep** is throttled to once a minute and runs inline on a request. It is O(map size),
-so at the 50,000 cap it is a 50,000-iteration loop once per minute — negligible next to a
-single database round-trip.
+Our server doesn't talk to visitors directly. Render sits in front of it and passes requests
+along. So by default, every request looks like it came from Render, not from the visitor.
 
-**The hard cap** is a blunt instrument: exceeding it clears every bucket, briefly resetting
-everyone's counter. That is a deliberate trade. On a 512 MB instance, a flood of unique
-source addresses exhausting the heap is a worse outcome than a momentary gap in enforcement.
+Without this line, **everyone shares one counter.** The first 30 people to look up a wallet
+would use up the allowance for the entire internet.
 
----
+The `1` matters too. It means "trust one server in front of us" — Render. If you set it to
+`true` ("trust everyone"), visitors could lie about their own IP address and get a fresh
+allowance on every request, which defeats the whole thing.
 
-## What is tested
-
-Two of the 27 checks in `server/scripts/verify.mjs` (`npm --prefix server run verify`):
-
-- **`rate limit trips at 31st request`** — sends 31 requests to `/api/trader`, asserts the
-  first 30 return `400` (invalid address, i.e. they reached the route) and the 31st returns
-  `429`. This verifies the limiter counts *attempts* rather than successes, which is the
-  property that matters: a limiter that only counted valid requests would let an attacker
-  probe freely with malformed input.
-- **`429 carries Retry-After`** — asserts the header is present, since a client cannot back
-  off intelligently without it.
-
-Not covered: window expiry and reset, per-name bucket isolation, and behaviour under
-concurrent requests.
+If you ever move off Render, check this number again. It describes your hosting setup, not
+your code. On a plain server with nothing in front of it, it should be `false`.
 
 ---
 
-## Known characteristics
+## Memory
 
-These are properties of the design, not bugs — but you should meet them here rather than
-during an incident.
+The list of counters lives in memory, so it can't be allowed to grow forever. Two things keep
+it in check:
 
-### Fixed windows allow burst-at-the-boundary
+**Cleanup.** Once a minute, the server walks the list and deletes expired counters. It runs
+during a normal request and takes almost no time.
 
-Thirty requests at `11:59:59` and thirty more at `12:00:01` is sixty requests in two seconds,
-all permitted, because the bucket is replaced at the boundary. The effective short-term
-ceiling is **2× the configured limit**.
+**A hard ceiling.** If the list ever passes 50,000 entries, it gets wiped completely.
 
-A sliding-window or token-bucket algorithm removes this. It is not worth the complexity here
-— the limits exist to stop sustained abuse and amplification, and a two-second doubling
-threatens neither.
-
-### The IPN webhook shares a bucket with checkout
-
-`/api/billing` covers both `POST /checkout` and the NOWPayments IPN callback under one
-60/minute limit, keyed by IP. Every IPN arrives from NOWPayments' address, so all callbacks
-worldwide share a single bucket.
-
-At current volume this is irrelevant. If payment volume ever grows enough for 60 callbacks a
-minute to be plausible, split the webhook into its own limiter with a `keyFn` that ignores IP,
-or exempt it and rely on the HMAC signature check for protection. The signature check is
-already the real defence there; the rate limit is only a flood guard.
-
-### Shared IPs share a bucket
-
-Everyone behind one corporate NAT, VPN exit node, or university gateway counts as one client.
-The limits are set loosely enough that this is unlikely to bite, but it is the reason
-`/api/trader` is 30/minute rather than 5.
+Wiping everything is crude — it briefly resets everyone's count. But running out of memory
+would take the whole site down, and a few seconds of weak enforcement is much better than
+that.
 
 ---
 
-## Scaling past one instance
+## What's tested
 
-**Counters live in process memory.** With one instance that is correct and cheap. With two,
-each keeps its own map: effective limits double, and enforcement depends on which instance a
-request happens to land on.
+Two of the 27 checks in `npm --prefix server run verify` cover this:
 
-The migration is contained. Replace the `buckets` Map with Redis `INCR` + `EXPIRE`; the
-middleware signature and every call site stay identical:
+**"rate limit trips at 31st request"** — sends 31 trader requests and checks that the first 30
+get through and the 31st is blocked.
 
-```ts
-const n = await redis.incr(key);
-if (n === 1) await redis.pexpire(key, opts.windowMs);
-if (n > opts.max) { /* 429 */ }
-```
+There's a detail here worth understanding. The test uses a deliberately invalid address, so
+the first 30 come back as errors. That's the point: it proves we count **every attempt**, not
+just the successful ones. If we only counted valid requests, someone could send unlimited
+garbage and never hit the limit.
 
-Do this when you add a second instance, not before. A Redis dependency for a single free-tier
-process is cost and failure surface bought for nothing.
+**"429 carries Retry-After"** — checks the blocked response tells you how long to wait.
+Without that, an app has no idea when to try again.
+
+**Not tested:** that counters actually reset when the minute is up, that the sections really
+are separate from each other, and what happens when lots of requests arrive at the same
+instant.
 
 ---
 
-## Changing a limit
+## Quirks worth knowing
 
-Edit the `rateLimit({ ... })` call in `server/src/index.ts`. Nothing is read from the
-environment, deliberately — a limit is a security property and should change through a
-reviewed commit rather than a dashboard field somebody can edit at 3am.
+These aren't bugs. They're side effects of keeping it simple. Better to know now than to be
+confused later.
 
-If you raise `/api/trader`, remember what it multiplies into: ~50 upstream calls each. Thirty
-per minute per IP is already 1,500 requests a minute to Polymarket from one client.
+### You can briefly get double the limit
+
+The counter resets at a fixed moment. So someone could make 30 requests at 11:59:59 and 30
+more at 12:00:01 — 60 requests in two seconds, all allowed, because the counter reset in
+between.
+
+A more complicated design would prevent this. We didn't bother, because the limits exist to
+stop *sustained* abuse, and two seconds of double speed doesn't hurt anything.
+
+### Payment callbacks share a limit with checkout
+
+When someone pays, NOWPayments sends our server a message confirming it. That message and the
+"start checkout" button share the same 60/minute allowance, counted by IP address.
+
+Since every payment confirmation comes from NOWPayments' own servers, they all share one
+counter. At your current volume this doesn't matter at all. If you ever get 60 payments in a
+minute, it would — and the fix is to give the payment callback its own limit.
+
+Worth knowing: the callback is already protected by a signature check that proves the message
+really came from NOWPayments. The rate limit there is just a flood guard, not the main
+defence.
+
+### People sharing an internet connection share a counter
+
+Everyone in one office, on one VPN, or on one university network looks like a single visitor
+to us, because they share an IP address.
+
+This is why trader lookups are 30 a minute and not 5. The limits are set loosely enough that
+normal shared connections won't hit them.
+
+---
+
+## When you outgrow this
+
+Right now you run **one** server, and the counters live in that server's memory. That works
+perfectly.
+
+The moment you run **two** servers, it stops working properly. Each one keeps its own separate
+list, so your real limit doubles, and whether someone gets blocked depends on which server
+their request happened to land on.
+
+The fix is to move the counters into Redis (a shared memory store both servers can read). It's
+a small change — only the storage part changes, and nothing else has to be touched.
+
+Don't do it until you actually run a second server. Adding Redis now means paying for it and
+maintaining it for no benefit.
+
+---
+
+## How to change a limit
+
+Open `server/src/index.ts` and edit the numbers in the `rateLimit({ ... })` lines.
+
+The limits are in the code on purpose, not in a settings dashboard. A rate limit is a security
+setting, so changing it should go through a proper code change that someone can review — not a
+text box somebody edits at 3am.
+
+**Before raising the trader limit, remember the multiplier.** Each trader lookup is about 50
+requests to Polymarket. At 30 a minute, one person is already generating 1,500 requests a
+minute to them. Doubling it to 60 means 3,000.
