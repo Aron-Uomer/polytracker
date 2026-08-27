@@ -30,9 +30,17 @@ model Trader {
   losses         Int     @default(0)
   winRate        Float? // null when no resolved positions yet
 
-  // Full computed payload (positions list etc.) so the frontend can render
-  // everything from cache without recomputing.
-  payload Json
+  /// Full computed payload (positions list etc.), gzipped.
+  ///
+  /// Reading this column IS the database egress of a trader lookup — nothing
+  /// else in the app reads this table.
+  ///
+  /// It used to be `Json`. Postgres compresses JSON on disk, so the column
+  /// *looked* like 1.4 MB, but it is decompressed before being sent: the wire
+  /// cost was the full 4.0 MB of text on every single cache hit. Storing gzipped
+  /// bytes means what is stored is also what is transferred — measured at
+  /// 825 KB for the same wallet, a 79% cut.
+  payload Bytes
 
   lastFetchedAt DateTime @default(now())
   createdAt     DateTime @default(now())

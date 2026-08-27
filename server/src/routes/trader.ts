@@ -1,3 +1,4 @@
+import { gzipSync, gunzipSync } from "node:zlib";
 import { Router } from "express";
 import { prisma, withDb, DB_ENABLED } from "../db.js";
 import { computeTraderStats, computeTraderQuick, type TraderStats } from "../stats.js";
@@ -10,8 +11,51 @@ export const traderRouter = Router();
 const CACHE_TTL_SECONDS = Number(process.env.CACHE_TTL_SECONDS ?? 300);
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
+/**
+ * Second-level cache, in this process.
+ *
+ * The database cache costs real egress on every hit — the payload column is the
+ * only thing in this app that moves meaningful bytes out of Postgres. Serving a
+ * repeat lookup from memory costs nothing at all.
+ *
+ * It is not a replacement for the database cache: on Render's free tier the
+ * process sleeps after ~15 minutes idle, so this map starts empty far more
+ * often than a normal server's would. It absorbs the repeats inside one wake
+ * window, which is where most of them happen.
+ *
+ * Capped by entry count rather than bytes. A payload can reach 1.4 MB, so 25
+ * entries is ~35 MB worst case on a 512 MB instance — deliberately modest.
+ */
+const MEM_CACHE_MAX = Number(process.env.MEM_CACHE_MAX ?? 25);
+const memCache = new Map<string, { at: number; stats: TraderStats }>();
+
+function memGet(address: string): TraderStats | null {
+  const hit = memCache.get(address);
+  if (!hit) return null;
+  if (Date.now() - hit.at >= CACHE_TTL_SECONDS * 1000) {
+    memCache.delete(address);
+    return null;
+  }
+  // Refresh insertion order so this entry is now the most recently used.
+  memCache.delete(address);
+  memCache.set(address, hit);
+  return hit.stats;
+}
+
+function memSet(address: string, stats: TraderStats): void {
+  memCache.delete(address);
+  memCache.set(address, { at: Date.now(), stats });
+  // Map iterates in insertion order, so the first key is the oldest.
+  while (memCache.size > MEM_CACHE_MAX) {
+    const oldest = memCache.keys().next().value;
+    if (oldest === undefined) break;
+    memCache.delete(oldest);
+  }
+}
+
 /** Upsert the cached stats row (no-op without a database). */
 async function persist(address: string, stats: TraderStats) {
+  memSet(address, stats);
   await withDb(async (db) => {
     const row = {
       name: stats.profile.name,
@@ -28,7 +72,7 @@ async function persist(address: string, stats: TraderStats) {
       wins: stats.wins,
       losses: stats.losses,
       winRate: stats.winRate,
-      payload: stats as unknown as object,
+      payload: gzipSync(Buffer.from(JSON.stringify(stats), "utf8")),
     };
     await db.trader.upsert({
       where: { address },
@@ -69,6 +113,12 @@ interface TraderPayload {
  * than one proportional to how much that wallet has traded.
  */
 async function loadTrader(address: string, forceRefresh: boolean): Promise<TraderPayload> {
+  if (!forceRefresh) {
+    // Free: costs neither a database round trip nor any egress.
+    const hot = memGet(address);
+    if (hot) return { cached: true, indexing: hot.tradesCapped, stats: hot };
+  }
+
   if (DB_ENABLED && !forceRefresh) {
     // Check the age BEFORE pulling the payload. A cached payload runs to 1.4 MB
     // on an active wallet, and fetching the whole row only to discover it is
@@ -84,9 +134,18 @@ async function loadTrader(address: string, forceRefresh: boolean): Promise<Trade
       const cached = await withDb((db) =>
         db.trader.findUnique({ where: { address }, select: { payload: true } })
       );
-      if (cached) {
-        const stats = cached.payload as unknown as TraderStats;
-        return { cached: true, indexing: stats.tradesCapped, stats };
+      if (cached?.payload?.length) {
+        try {
+          const stats = JSON.parse(
+            gunzipSync(cached.payload).toString("utf8")
+          ) as TraderStats;
+          memSet(address, stats);
+          return { cached: true, indexing: stats.tradesCapped, stats };
+        } catch (err) {
+          // A payload written by an older build, or a truncated one. Fall
+          // through and recompute rather than serving nothing.
+          console.warn("[trader] unreadable cached payload, recomputing:", err);
+        }
       }
     }
   }
