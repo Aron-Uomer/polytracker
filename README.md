@@ -147,8 +147,5 @@ those, copy `server/.env.example` to `server/.env`, add a Postgres `DATABASE_URL
 
 **Further reading:**
 
-- [DEPLOY.md](DEPLOY.md) — deploying to Vercel, Render and Neon, plus every environment
-  variable, Google sign-in, crypto billing and analytics
 - [RATE-LIMITING.md](RATE-LIMITING.md) — how request limits work and why each one is set
   where it is
-- [PRODUCT.md](PRODUCT.md) — who this is for and what it's trying to be
