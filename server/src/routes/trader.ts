@@ -10,6 +10,7 @@ import {
 import { getActivityStats } from "../polymarket.js";
 import { once } from "../inflight.js";
 import { TtlCache } from "../ttlcache.js";
+import { selectPositions, isMode, isSortKey } from "../positions.js";
 import { publicDetail } from "../errors.js";
 
 export const traderRouter = Router();
@@ -83,6 +84,19 @@ interface TraderPayload {
 }
 
 /**
+ * Strip the position arrays before sending.
+ *
+ * They are the entire reason a response reached 4 MB: 7,087 rows shipped so the
+ * table could show twenty. They stay in the cached payload, because that is
+ * where /positions reads its pages from — they simply stop crossing the wire on
+ * every page view.
+ */
+function toWire(stats: TraderStats): Omit<TraderStats, "openPositions" | "resolvedPositions"> {
+  const { openPositions: _o, resolvedPositions: _r, ...rest } = stats;
+  return rest;
+}
+
+/**
  * Serves the cached stats row if it is still fresh, otherwise recomputes from a
  * live read and caches the result.
  *
@@ -151,7 +165,11 @@ traderRouter.get("/:address", async (req, res) => {
     const payload = await once(`trader:${address}:${forceRefresh}`, () =>
       loadTrader(address, forceRefresh)
     );
-    return res.json(payload);
+    return res.json({
+      cached: payload.cached,
+      indexing: payload.indexing,
+      stats: toWire(payload.stats),
+    });
   } catch (err) {
     console.error("trader route error", err);
     return res.status(502).json({
@@ -187,6 +205,49 @@ traderRouter.get("/:address/summary", async (req, res) => {
   } catch (err) {
     return res.status(502).json({
       error: "Failed to fetch trader summary.",
+      detail: publicDetail(err),
+    });
+  }
+});
+
+/**
+ * GET /api/trader/:address/positions — one sorted page of the positions table.
+ *
+ * Reads from the same cached stats the main route serves, so a page turn costs
+ * no upstream calls and, on a warm cache, no database round trip either. Sorting
+ * happens across the whole set before slicing, so page 3 of "by P&L" is the real
+ * third page, not the third page of an arbitrary order.
+ *
+ *   ?mode=all|open|resolved  ?sort=firstTradeAt|lastTradeAt|title|value|pnl
+ *   ?dir=asc|desc            ?page=0  ?pageSize=20
+ */
+traderRouter.get("/:address/positions", async (req, res) => {
+  const address = req.params.address?.toLowerCase();
+  if (!ADDRESS_RE.test(address)) {
+    return res.status(400).json({ error: "Invalid wallet address." });
+  }
+
+  const mode = isMode(req.query.mode) ? req.query.mode : "all";
+  const sort = isSortKey(req.query.sort) ? req.query.sort : undefined;
+  const dir = req.query.dir === "asc" || req.query.dir === "desc" ? req.query.dir : undefined;
+
+  try {
+    // Same coalescing key as the main route: a page turn arriving while the
+    // wallet is still being computed waits for that one pass instead of
+    // starting a second.
+    const payload = await once(`trader:${address}:false`, () => loadTrader(address, false));
+    return res.json(
+      selectPositions(payload.stats.openPositions, payload.stats.resolvedPositions, {
+        mode,
+        sort,
+        dir,
+        page: Number(req.query.page),
+        pageSize: Number(req.query.pageSize),
+      })
+    );
+  } catch (err) {
+    return res.status(502).json({
+      error: "Failed to fetch positions.",
       detail: publicDetail(err),
     });
   }

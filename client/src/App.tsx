@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchTrader,
   fetchTraderSummary,
+  fetchPositions,
   getWatchlist,
   addWatch,
   removeWatch,
@@ -16,6 +17,10 @@ import {
 import type {
   AddWatchResult,
   AuthUser,
+  PositionMode,
+  PositionPage,
+  PositionSortKey,
+  SortDir,
   TraderStats,
   TraderSummary,
   WatchlistState,
@@ -46,6 +51,17 @@ import {
 } from "./components/icons";
 import { SplitFlap, BoardRow } from "./components/Board";
 import { initAnalytics, pageview, track } from "./analytics";
+
+/**
+ * Mirrors DEFAULT_SORT in server/src/positions.ts. Kept here too so the first
+ * request for a tab asks for the ordering it is about to display, rather than
+ * fetching one ordering and immediately refetching another.
+ */
+const DEFAULT_POSITION_SORT: Record<PositionMode, { key: PositionSortKey; dir: SortDir }> = {
+  open: { key: "value", dir: "desc" },
+  resolved: { key: "lastTradeAt", dir: "desc" },
+  all: { key: "lastTradeAt", dir: "desc" },
+};
 
 /** Hash routes reported to analytics as real paths — see analytics.ts. */
 const ANALYTICS_PATH: Record<Route, string> = {
@@ -331,13 +347,58 @@ export default function App() {
   const showHero = onHome && !trader;
   const isPro = watch?.plan === "pro";
 
-  // Backs the "All" tab. Ordering is PositionsTable's job — it owns the sort
-  // state for every tab, so there's one implementation instead of two. Memoised
-  // so the table isn't handed a fresh array (and forced to re-sort) every render.
-  const allPositions = useMemo(
-    () => (stats ? [...stats.openPositions, ...stats.resolvedPositions] : []),
-    [stats]
+  // Sorting and paging now happen on the server, so this holds the current page
+  // rather than the whole list. A wallet with 7,000 positions used to arrive in
+  // one 4 MB response so the table could show twenty of them.
+  const [posPage, setPosPageData] = useState<PositionPage | null>(null);
+  const [posLoading, setPosLoading] = useState(false);
+  const [posSort, setPosSort] = useState<{ key: PositionSortKey; dir: SortDir }>(
+    DEFAULT_POSITION_SORT.all
   );
+  const [posPageNum, setPosPageNum] = useState(0);
+
+  // Each tab carries its own sensible default, and changing tab starts at page 1.
+  useEffect(() => {
+    setPosSort(DEFAULT_POSITION_SORT[tab]);
+    setPosPageNum(0);
+  }, [tab]);
+
+  // Re-sorting always returns to the first page — page 4 of a different ordering
+  // is a different set of rows, and staying there would look like a glitch.
+  const onSortPositions = (key: PositionSortKey) => {
+    setPosSort((s) =>
+      s.key === key
+        ? { key, dir: s.dir === "desc" ? "asc" : "desc" }
+        : // First click on a new column: dates and money read newest/biggest
+          // first, names read A–Z.
+          { key, dir: key === "title" ? "asc" : "desc" }
+    );
+    setPosPageNum(0);
+  };
+
+  const setPosPage = (page: number) => setPosPageNum(page);
+
+  // Fetch whenever the wallet, tab, sort or page changes. Aborts the previous
+  // request so quickly clicking through pages can't land them out of order.
+  useEffect(() => {
+    if (!stats) {
+      setPosPageData(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    setPosLoading(true);
+    fetchPositions(
+      stats.address,
+      { mode: tab, sort: posSort.key, dir: posSort.dir, page: posPageNum },
+      ctrl.signal
+    )
+      .then((p) => setPosPageData(p))
+      .catch((e) => {
+        if (e instanceof Error && e.name !== "AbortError") console.warn("positions:", e.message);
+      })
+      .finally(() => setPosLoading(false));
+    return () => ctrl.abort();
+  }, [stats, tab, posSort, posPageNum]);
 
   return (
     <>
@@ -548,14 +609,23 @@ export default function App() {
                   </div>
                   <div className="px-3 pb-2">
                     <PositionsTable
-                      positions={
-                        tab === "open"
-                          ? stats.openPositions
-                          : tab === "resolved"
-                          ? stats.resolvedPositions
-                          : allPositions
-                      }
+                      positions={posPage?.positions ?? []}
                       mode={tab}
+                      total={
+                        posPage?.total ??
+                        (tab === "open"
+                          ? stats.openPositionsCount
+                          : tab === "resolved"
+                          ? stats.resolvedCount
+                          : stats.openPositionsCount + stats.resolvedCount)
+                      }
+                      page={posPage?.page ?? 0}
+                      pageSize={posPage?.pageSize ?? 20}
+                      sort={posSort.key}
+                      dir={posSort.dir}
+                      loading={posLoading}
+                      onPage={setPosPage}
+                      onSort={onSortPositions}
                     />
                   </div>
                 </div>
@@ -654,9 +724,37 @@ function QuickView({
       {open.length > 0 && (
         <div className="glass rounded-2xl p-4">
           <h3 className="mb-2 font-display text-[12px] font-bold uppercase tracking-plate text-bone-dim">
-            Open positions
+            Biggest open positions
           </h3>
-          <PositionsTable positions={open} mode="open" />
+          {/* A read-only preview of the top few by value — deliberately not the
+              sortable table. This view exists for the second or two before the
+              full stats land, and paging it would mean firing requests at a
+              wallet that is about to be replaced by the real one. */}
+          <ul className="divide-y divide-board-rule">
+            {open.map((p) => (
+              <li
+                key={p.conditionId + p.outcome}
+                className="flex items-center gap-3 py-2.5 text-sm"
+              >
+                {p.icon && (
+                  <img src={p.icon} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />
+                )}
+                <span className="line-clamp-1 flex-1 text-slate-200">{p.title}</span>
+                <span className="shrink-0 text-xs uppercase tracking-wider text-muted">
+                  {p.outcome}
+                </span>
+                <span className="shrink-0 font-mono tabular-nums text-slate-300">
+                  {usdFull(p.currentValue)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {(quick.openPositionsCount ?? 0) > open.length && (
+            <p className="pt-2 text-xs text-muted">
+              Showing the top {open.length} of {quick.openPositionsCount}. The full,
+              sortable list arrives with the complete history.
+            </p>
+          )}
         </div>
       )}
     </section>

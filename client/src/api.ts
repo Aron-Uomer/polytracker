@@ -6,6 +6,10 @@ import type {
   LeaderboardRow,
   LeaderboardWindow,
   Plan,
+  PositionMode,
+  PositionPage,
+  PositionSortKey,
+  SortDir,
   SmartMoneyFilters,
   SmartMoneyResult,
   TraderResponse,
@@ -143,6 +147,30 @@ export async function fetchLeaderboard(
 ): Promise<LeaderboardResponse> {
   const url = `${API_BASE}/api/leaderboard?metric=${metric}&window=${window}&limit=${limit}`;
   const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
+/**
+ * One page of the positions table. Sorting and slicing happen server-side, so
+ * page 3 of "by P&L" is the real third page across the whole set, not the third
+ * page of whatever happened to be downloaded.
+ */
+export async function fetchPositions(
+  address: string,
+  opts: { mode: PositionMode; sort: PositionSortKey; dir: SortDir; page: number },
+  signal?: AbortSignal
+): Promise<PositionPage> {
+  const q = new URLSearchParams({
+    mode: opts.mode,
+    sort: opts.sort,
+    dir: opts.dir,
+    page: String(opts.page),
+  });
+  const res = await fetch(`${API_BASE}/api/trader/${address}/positions?${q}`, { signal });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `Request failed (${res.status})`);

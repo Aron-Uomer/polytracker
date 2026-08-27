@@ -138,6 +138,9 @@ export async function computeTraderSummary(address: string): Promise<TraderSumma
   };
 }
 
+/** How many open positions the tier-1 preview carries. */
+const QUICK_POSITION_PREVIEW = 10;
+
 /** Tier 1: everything a trader page can show WITHOUT reconstructing history. */
 export interface TraderQuick extends TraderSummary {
   openPositions: PositionView[];
@@ -178,7 +181,11 @@ export async function computeTraderQuick(address: string): Promise<TraderQuick> 
     profitToday: lb.profitToday,
     totalVolume: lb.volume,
     portfolioValue,
-    openPositions: open,
+    // A preview, not the full list. This is a placeholder shown for about a
+    // second while the full lookup finishes, and one wallet here holds 1,185
+    // open positions — shipping all of them to render a handful was most of
+    // this endpoint's payload. The count below still reports the real total.
+    openPositions: open.slice(0, QUICK_POSITION_PREVIEW),
     openPositionsCount: open.length,
   };
 }

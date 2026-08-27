@@ -47,8 +47,9 @@ export interface TraderStats {
   wins: number;
   losses: number;
   winRate: number | null;
-  openPositions: PositionView[];
-  resolvedPositions: PositionView[];
+  // Positions are NOT in this payload. They are fetched a page at a time from
+  // /api/trader/:address/positions — shipping 7,000 rows to render 20 was 4 MB
+  // per page view. openPositionsCount and resolvedCount above still give totals.
   details: TraderDetails;
   dailySeries: DailyPoint[];
   lastUpdated: string;
@@ -142,7 +143,8 @@ export interface TraderSummary {
   profitToday: number;
   totalVolume: number;
   portfolioValue: number;
-  /** Present on the trader-page summary; absent on lighter callers. */
+  /** A short preview (top 10 by value), not the full list. Present on the
+   *  trader-page summary; absent on lighter callers. */
   openPositions?: PositionView[];
   openPositionsCount?: number;
 }
@@ -177,4 +179,24 @@ export interface AddWatchResult {
   authRequired?: boolean; // not signed in — tracking needs an account
   error?: string;
   state?: WatchlistState;
+}
+
+export type PositionMode = "all" | "open" | "resolved";
+export type PositionSortKey =
+  | "firstTradeAt"
+  | "lastTradeAt"
+  | "title"
+  | "value"
+  | "pnl";
+export type SortDir = "asc" | "desc";
+
+/** One sorted, sliced page of the positions table. */
+export interface PositionPage {
+  positions: PositionView[];
+  total: number;
+  page: number;
+  pageSize: number;
+  mode: PositionMode;
+  sort: PositionSortKey;
+  dir: SortDir;
 }

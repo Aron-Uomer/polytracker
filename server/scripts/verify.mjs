@@ -278,10 +278,79 @@ async function phaseDetail() {
   check("development keeps detail", typeof dev.detail === "string");
 }
 
+/* ---------------------------------------------------------------- phase 6 */
+// Positions paging. A pure function, so this needs no server and no upstream
+// data — it is checked here because getting it wrong returns an empty table
+// rather than an error, which is the kind of bug that ships quietly.
+async function phasePositions() {
+  console.log("\n\x1b[1m6. Positions paging\x1b[0m");
+  const { selectPositions, PAGE_SIZE } = await import("../dist/positions.js");
+
+  const day = (n) => new Date(Date.UTC(2026, 0, n)).toISOString();
+  const pos = (i, over = {}) => ({
+    conditionId: `c${i}`,
+    title: `Market ${String(i).padStart(3, "0")}`,
+    slug: "", icon: "", outcome: "Yes",
+    size: 1, avgPrice: 0.5, curPrice: 0.5,
+    initialValue: i, currentValue: i * 2,
+    cashPnl: 0, percentPnl: 0, realizedPnl: 0,
+    pnl: i,
+    resolved: false,
+    firstTradeAt: day(1 + (i % 28)),
+    lastTradeAt: day(1 + (i % 28)),
+    ...over,
+  });
+
+  const open = Array.from({ length: 45 }, (_, i) => pos(i));
+  const resolved = Array.from({ length: 30 }, (_, i) => pos(100 + i, { resolved: true }));
+
+  // The bug this phase exists for: the route builds these from
+  // Number(req.query.page), so a request with no paging params hands in NaN.
+  const bare = selectPositions(open, resolved, { mode: "all", page: NaN, pageSize: NaN });
+  check(
+    "missing page/pageSize fall back, not NaN",
+    bare.positions.length === PAGE_SIZE && bare.page === 0 && bare.pageSize === PAGE_SIZE,
+    `rows ${bare.positions.length}, page ${bare.page}, size ${bare.pageSize}`
+  );
+  check("total counts the whole set, not the page", bare.total === 75, `total ${bare.total}`);
+
+  const openPage = selectPositions(open, resolved, { mode: "open" });
+  check("mode=open excludes resolved", openPage.total === 45 && openPage.positions.every((p) => !p.resolved));
+
+  // Sorting must span the whole set before slicing, or page 2 is just the
+  // second chunk of an arbitrary order.
+  const byPnl = selectPositions(open, resolved, { mode: "open", sort: "pnl", dir: "asc", page: 2 });
+  check(
+    "page 2 continues the global sort",
+    byPnl.positions[0].pnl === 40 && byPnl.positions.length === 5,
+    `first pnl ${byPnl.positions[0].pnl}, rows ${byPnl.positions.length}`
+  );
+
+  // Resolved rows sort on what they were worth; open rows on what they are
+  // worth now. Getting this backwards makes every closed position read as $0.
+  const byValue = selectPositions(open, resolved, { mode: "all", sort: "value", dir: "desc" });
+  check("value uses initialValue once resolved", byValue.positions[0].conditionId === "c129");
+
+  const past = selectPositions(open, resolved, { mode: "all", page: 900 });
+  check("out-of-range page is empty, not an error", past.positions.length === 0 && past.total === 75);
+
+  const huge = selectPositions(open, resolved, { mode: "all", pageSize: 5000 });
+  check("pageSize is capped", huge.pageSize === 100, `size ${huge.pageSize}`);
+
+  // An unknown date is not "the oldest" — those rows belong at the bottom
+  // whichever way the column is pointing.
+  const undated = [pos(999, { firstTradeAt: null, lastTradeAt: null })];
+  for (const dir of ["asc", "desc"]) {
+    const p = selectPositions(undated.concat(open), [], { mode: "open", sort: "lastTradeAt", dir, pageSize: 100 });
+    check(`undated rows sort last (${dir})`, p.positions[p.positions.length - 1].conditionId === "c999");
+  }
+}
+
 await phaseDev();
 await phaseProd();
 await phaseSecret();
 await phaseDetail();
+await phasePositions();
 
 const failed = results.filter((r) => !r.pass);
 console.log(
