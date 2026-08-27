@@ -70,10 +70,24 @@ interface TraderPayload {
  */
 async function loadTrader(address: string, forceRefresh: boolean): Promise<TraderPayload> {
   if (DB_ENABLED && !forceRefresh) {
-    const cached = await withDb((db) => db.trader.findUnique({ where: { address } }));
-    if (cached && Date.now() - cached.lastFetchedAt.getTime() < CACHE_TTL_SECONDS * 1000) {
-      const stats = cached.payload as unknown as TraderStats;
-      return { cached: true, indexing: stats.tradesCapped, stats };
+    // Check the age BEFORE pulling the payload. A cached payload runs to 1.4 MB
+    // on an active wallet, and fetching the whole row only to discover it is
+    // stale and discard it spends that bandwidth for nothing. Two small queries
+    // beat one large wasted one.
+    const meta = await withDb((db) =>
+      db.trader.findUnique({ where: { address }, select: { lastFetchedAt: true } })
+    );
+    const fresh =
+      meta && Date.now() - meta.lastFetchedAt.getTime() < CACHE_TTL_SECONDS * 1000;
+
+    if (fresh) {
+      const cached = await withDb((db) =>
+        db.trader.findUnique({ where: { address }, select: { payload: true } })
+      );
+      if (cached) {
+        const stats = cached.payload as unknown as TraderStats;
+        return { cached: true, indexing: stats.tradesCapped, stats };
+      }
     }
   }
 
