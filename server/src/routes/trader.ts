@@ -1,9 +1,15 @@
 import { gzipSync, gunzipSync } from "node:zlib";
 import { Router } from "express";
 import { prisma, withDb, DB_ENABLED } from "../db.js";
-import { computeTraderStats, computeTraderQuick, type TraderStats } from "../stats.js";
+import {
+  computeTraderStats,
+  computeTraderQuick,
+  type TraderStats,
+  type TraderQuick,
+} from "../stats.js";
 import { getActivityStats } from "../polymarket.js";
 import { once } from "../inflight.js";
+import { TtlCache } from "../ttlcache.js";
 import { publicDetail } from "../errors.js";
 
 export const traderRouter = Router();
@@ -11,51 +17,24 @@ export const traderRouter = Router();
 const CACHE_TTL_SECONDS = Number(process.env.CACHE_TTL_SECONDS ?? 300);
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
+// Full stats: large values, so a small cap. 25 x up to 1.4 MB is ~35 MB.
+const statsCache = new TtlCache<TraderStats>(CACHE_TTL_SECONDS * 1000, 25);
+
 /**
- * Second-level cache, in this process.
+ * Tier-1 summaries.
  *
- * The database cache costs real egress on every hit — the payload column is the
- * only thing in this app that moves meaningful bytes out of Postgres. Serving a
- * repeat lookup from memory costs nothing at all.
+ * These had no cache of any kind, so every page load and every refresh made
+ * about eight fresh calls to Polymarket even when the full stats were already
+ * cached and about to be served instantly. Reloading a page five times meant
+ * forty upstream requests for data that had not changed.
  *
- * It is not a replacement for the database cache: on Render's free tier the
- * process sleeps after ~15 minutes idle, so this map starts empty far more
- * often than a normal server's would. It absorbs the repeats inside one wake
- * window, which is where most of them happen.
- *
- * Capped by entry count rather than bytes. A payload can reach 1.4 MB, so 25
- * entries is ~35 MB worst case on a 512 MB instance — deliberately modest.
+ * The values are far smaller than full stats, so this holds more of them.
  */
-const MEM_CACHE_MAX = Number(process.env.MEM_CACHE_MAX ?? 25);
-const memCache = new Map<string, { at: number; stats: TraderStats }>();
-
-function memGet(address: string): TraderStats | null {
-  const hit = memCache.get(address);
-  if (!hit) return null;
-  if (Date.now() - hit.at >= CACHE_TTL_SECONDS * 1000) {
-    memCache.delete(address);
-    return null;
-  }
-  // Refresh insertion order so this entry is now the most recently used.
-  memCache.delete(address);
-  memCache.set(address, hit);
-  return hit.stats;
-}
-
-function memSet(address: string, stats: TraderStats): void {
-  memCache.delete(address);
-  memCache.set(address, { at: Date.now(), stats });
-  // Map iterates in insertion order, so the first key is the oldest.
-  while (memCache.size > MEM_CACHE_MAX) {
-    const oldest = memCache.keys().next().value;
-    if (oldest === undefined) break;
-    memCache.delete(oldest);
-  }
-}
+const quickCache = new TtlCache<TraderQuick>(CACHE_TTL_SECONDS * 1000, 200);
 
 /** Upsert the cached stats row (no-op without a database). */
 async function persist(address: string, stats: TraderStats) {
-  memSet(address, stats);
+  statsCache.set(address, stats);
   await withDb(async (db) => {
     const row = {
       name: stats.profile.name,
@@ -115,7 +94,7 @@ interface TraderPayload {
 async function loadTrader(address: string, forceRefresh: boolean): Promise<TraderPayload> {
   if (!forceRefresh) {
     // Free: costs neither a database round trip nor any egress.
-    const hot = memGet(address);
+    const hot = statsCache.get(address);
     if (hot) return { cached: true, indexing: hot.tradesCapped, stats: hot };
   }
 
@@ -139,7 +118,7 @@ async function loadTrader(address: string, forceRefresh: boolean): Promise<Trade
           const stats = JSON.parse(
             gunzipSync(cached.payload).toString("utf8")
           ) as TraderStats;
-          memSet(address, stats);
+          statsCache.set(address, stats);
           return { cached: true, indexing: stats.tradesCapped, stats };
         } catch (err) {
           // A payload written by an older build, or a truncated one. Fall
@@ -193,7 +172,17 @@ traderRouter.get("/:address/summary", async (req, res) => {
     return res.status(400).json({ error: "Invalid wallet address." });
   }
   try {
-    const summary = await once(`quick:${address}`, () => computeTraderQuick(address));
+    const hot = quickCache.get(address);
+    if (hot) return res.json({ summary: hot });
+
+    // `once` still matters underneath: it stops several simultaneous first
+    // lookups of the same cold wallet each starting their own fetch. The cache
+    // stops the *sequential* repeats — reloading the page a minute later.
+    const summary = await once(`quick:${address}`, async () => {
+      const computed = await computeTraderQuick(address);
+      quickCache.set(address, computed);
+      return computed;
+    });
     return res.json({ summary });
   } catch (err) {
     return res.status(502).json({
