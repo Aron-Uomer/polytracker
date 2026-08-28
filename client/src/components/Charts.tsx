@@ -15,7 +15,14 @@ const TONE = [
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export function ActivityCalendar({ daily }: { daily: DailyPoint[] }) {
+export function ActivityCalendar({
+  daily,
+  capped = false,
+}: {
+  daily: DailyPoint[];
+  /** The history read stopped before reaching the wallet's first trade. */
+  capped?: boolean;
+}) {
   const volByDate = useMemo(() => new Map(daily.map((d) => [d.date, d.volume])), [daily]);
   const maxVol = useMemo(() => Math.max(1, ...daily.map((d) => d.volume)), [daily]);
 
@@ -41,10 +48,14 @@ export function ActivityCalendar({ daily }: { daily: DailyPoint[] }) {
 
   let monthVol = 0;
   let monthTrades = 0;
+  let activeDays = 0;
+  let busiest: DailyPoint | null = null;
   for (const d of daily) {
     if (d.date.startsWith(monthKey)) {
       monthVol += d.volume;
       monthTrades += d.trades;
+      if (d.trades > 0) activeDays++;
+      if (d.volume > 0 && (!busiest || d.volume > busiest.volume)) busiest = d;
     }
   }
 
@@ -52,8 +63,19 @@ export function ActivityCalendar({ daily }: { daily: DailyPoint[] }) {
     const d = new Date(Date.UTC(cur.y, cur.m + delta, 1));
     setCur({ y: d.getUTCFullYear(), m: d.getUTCMonth() });
   };
+
+  // Paging stays inside the months we actually hold. On a heavily traded wallet
+  // the history read stops after a bounded number of pages, so `daily` can
+  // cover three days — a single month, with nowhere to page to. Rather than
+  // show two arrows that refuse to move, drop them: one month means one view.
   const canPrev = !minMonth || monthKey > minMonth;
   const canNext = !maxMonth || monthKey < maxMonth;
+  const navigable = Boolean(minMonth && maxMonth && minMonth !== maxMonth);
+
+  // A month inside the range with nothing in it was genuinely quiet — the read
+  // covered it. Saying "0 trades" is only safe because paging can't leave the
+  // range, so we never label unread months as inactive.
+  const monthHasData = monthTrades > 0 || monthVol > 0;
 
   return (
     <div className="glass rounded-xl p-4">
@@ -62,58 +84,114 @@ export function ActivityCalendar({ daily }: { daily: DailyPoint[] }) {
           Activity
         </h3>
         <div className="flex items-center gap-1">
-          <NavBtn disabled={!canPrev} onClick={() => shift(-1)}>
-            <ChevronLeft className="h-4 w-4" />
-          </NavBtn>
-          <span className="w-28 text-center text-sm font-medium text-slate-200">
+          {navigable && (
+            <NavBtn disabled={!canPrev} onClick={() => shift(-1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </NavBtn>
+          )}
+          <span
+            className={`text-center text-sm font-medium text-slate-200 ${navigable ? "w-28" : ""}`}
+          >
             {MONTHS[cur.m]} {cur.y}
           </span>
-          <NavBtn disabled={!canNext} onClick={() => shift(1)}>
-            <ChevronRight className="h-4 w-4" />
-          </NavBtn>
+          {navigable && (
+            <NavBtn disabled={!canNext} onClick={() => shift(1)}>
+              <ChevronRight className="h-4 w-4" />
+            </NavBtn>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1.5">
-        {WEEKDAYS.map((w) => (
-          <div key={w} className="pb-1 text-center text-[10px] uppercase tracking-wide text-muted">
-            {w}
-          </div>
-        ))}
-        {Array.from({ length: offset }).map((_, i) => (
-          <div key={`b${i}`} />
-        ))}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const day = i + 1;
-          const date = `${monthKey}-${String(day).padStart(2, "0")}`;
-          const vol = volByDate.get(date) ?? 0;
-          return (
-            <div
-              key={date}
-              title={`${date}: ${vol > 0 ? usd(vol) + " volume" : "no trades"}`}
-              className="relative aspect-square rounded-md text-[11px]"
-              style={{ background: TONE[intensity(vol)] }}
-            >
-              <span className={`absolute right-1 top-0.5 ${vol > 0 ? "text-white/80" : "text-muted"}`}>
-                {day}
-              </span>
+      {/* The cells are square and the grid has seven columns, so cell size is
+          driven entirely by how wide the container is. Left unconstrained on a
+          desktop that meant ~150px days and a card about 950px tall. The grid
+          is capped at a readable ~46px per day and the month's figures fill
+          the space beside it, rather than the card centring the grid and
+          leaving a wide empty margin either side. Below `sm` the two stack and
+          the card is already narrower than the cap, so phones are unaffected. */}
+      <div className="flex flex-col gap-5 sm:flex-row sm:gap-6">
+        <div className="grid w-full shrink-0 grid-cols-7 gap-1.5 sm:w-[360px]">
+          {WEEKDAYS.map((w) => (
+            <div key={w} className="pb-1 text-center text-[10px] uppercase tracking-wide text-muted">
+              {w}
             </div>
-          );
-        })}
-      </div>
-
-      <div className="mt-3 flex items-center justify-between text-xs text-muted">
-        <span>
-          {monthTrades.toLocaleString()} trades · {usd(monthVol)} volume
-        </span>
-        <span className="flex items-center gap-1.5 text-[10px]">
-          Less
-          {TONE.map((c, i) => (
-            <span key={i} className="h-2.5 w-2.5 rounded-[2px]" style={{ background: c }} />
           ))}
-          More
-        </span>
+          {Array.from({ length: offset }).map((_, i) => (
+            <div key={`b${i}`} />
+          ))}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const day = i + 1;
+            const date = `${monthKey}-${String(day).padStart(2, "0")}`;
+            const vol = volByDate.get(date) ?? 0;
+            return (
+              <div
+                key={date}
+                title={`${date}: ${vol > 0 ? usd(vol) + " volume" : "no trades"}`}
+                className="relative aspect-square rounded-md text-[11px]"
+                style={{ background: TONE[intensity(vol)] }}
+              >
+                <span className={`absolute right-1 top-0.5 ${vol > 0 ? "text-white/80" : "text-muted"}`}>
+                  {day}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-1 flex-col justify-between gap-5">
+          {monthHasData ? (
+            /* Two by two, not a list: as a single column these four sat in a
+               narrow strip and left the rest of the card empty. */
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+              <Figure label="Trades" value={monthTrades.toLocaleString()} />
+              <Figure label="Volume" value={usd(monthVol)} />
+              <Figure
+                label="Busiest day"
+                value={busiest ? usd(busiest.volume) : "–"}
+                sub={busiest ? `${MONTHS[cur.m]} ${Number(busiest.date.slice(8))}` : undefined}
+              />
+              <Figure
+                label="Active days"
+                value={String(activeDays)}
+                sub={`of ${daysInMonth}`}
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted">No trades this month.</p>
+          )}
+
+          <div className="space-y-2">
+            {/* Without this, a wallet whose read stopped after three days looks
+                like a wallet that only ever traded for three days. */}
+            {capped && (
+              <p className="text-xs leading-relaxed text-muted">
+                Recent activity only — this wallet has more history than one read covers.
+              </p>
+            )}
+            <span className="flex items-center gap-1.5 text-[10px] text-muted">
+              Less
+              {TONE.map((c, i) => (
+                <span key={i} className="h-2.5 w-2.5 rounded-[2px]" style={{ background: c }} />
+              ))}
+              More
+            </span>
+          </div>
+        </div>
       </div>
+    </div>
+  );
+}
+
+/** A month figure. Deliberately lighter than StatCard — these summarise the
+ *  month on screen, not the wallet, and shouldn't compete with the row above. */
+function Figure({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div>
+      <div className="text-[11px] font-medium uppercase tracking-wider text-muted">{label}</div>
+      <div className="mt-1 font-mono text-[20px] font-semibold leading-tight tracking-tight text-slate-100">
+        {value}
+      </div>
+      {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
     </div>
   );
 }

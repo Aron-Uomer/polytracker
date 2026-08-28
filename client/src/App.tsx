@@ -589,7 +589,11 @@ export default function App() {
                   <StatCard label="Portfolio Value" value={usd(stats.portfolioValue)} sub={`${stats.openPositionsCount} open positions`} />
                 </div>
 
-                <ActivityCalendar key={`cal-${stats.address}`} daily={stats.dailySeries} />
+                <ActivityCalendar
+                  key={`cal-${stats.address}`}
+                  daily={stats.dailySeries}
+                  capped={stats.tradesCapped}
+                />
 
                 <DetailsPanel stats={stats} />
 
