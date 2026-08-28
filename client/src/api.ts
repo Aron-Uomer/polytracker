@@ -17,6 +17,8 @@ import type {
   WatchlistState,
 } from "./types";
 
+import { cached, clearCache } from "./cache";
+
 // In dev, Vite proxies /api to the backend (see vite.config.ts).
 // In prod, set VITE_API_BASE to the deployed API origin.
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
@@ -102,6 +104,9 @@ export async function fetchMe(): Promise<AuthUser | null> {
 
 export function logout() {
   setToken(null);
+  // Smart money is Pro-only. Without this, a cached response would stay
+  // readable for the rest of its TTL after the session that earned it ended.
+  clearCache();
 }
 
 // --- Billing ---
@@ -140,18 +145,25 @@ export async function fetchTrader(
   return res.json();
 }
 
+/**
+ * Cached for {@link CACHE_TTL_MS}. Every parameter is in the key, so switching
+ * metric or window is still a real request — it is only the *same* view, asked
+ * for again after a tab bounce or a reload, that is served locally.
+ */
 export async function fetchLeaderboard(
   metric: LeaderboardMetric,
   window: LeaderboardWindow,
   limit = 25
 ): Promise<LeaderboardResponse> {
-  const url = `${API_BASE}/api/leaderboard?metric=${metric}&window=${window}&limit=${limit}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed (${res.status})`);
-  }
-  return res.json();
+  return cached(`lb:${metric}:${window}:${limit}`, async () => {
+    const url = `${API_BASE}/api/leaderboard?metric=${metric}&window=${window}&limit=${limit}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed (${res.status})`);
+    }
+    return res.json() as Promise<LeaderboardResponse>;
+  });
 }
 
 /**
@@ -236,20 +248,25 @@ export async function setPlan(plan: Plan): Promise<WatchlistState> {
   return readState(res, "Could not change your plan");
 }
 
+/** Cached like the leaderboard — this one scans many wallets upstream, so a
+ *  repeat view is the most expensive request in the app to serve twice. */
 export async function fetchSmartMoney(f: SmartMoneyFilters): Promise<SmartMoneyResult> {
-  const q = new URLSearchParams({
-    window: f.window,
-    count: String(f.count),
-    metric: f.metric,
-    side: f.side,
-    sort: f.sort,
+  const key = `sm:${f.window}:${f.count}:${f.metric}:${f.side}:${f.sort}`;
+  return cached(key, async () => {
+    const q = new URLSearchParams({
+      window: f.window,
+      count: String(f.count),
+      metric: f.metric,
+      side: f.side,
+      sort: f.sort,
+    });
+    const res = await fetch(`${API_BASE}/api/smart-money?${q}`, { headers: clientHeaders() });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed (${res.status})`);
+    }
+    return res.json() as Promise<SmartMoneyResult>;
   });
-  const res = await fetch(`${API_BASE}/api/smart-money?${q}`, { headers: clientHeaders() });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed (${res.status})`);
-  }
-  return res.json();
 }
 
 // --- Lightweight trader search (no public username API exists, so we index the
