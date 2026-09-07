@@ -50,9 +50,27 @@ const configured = (process.env.CORS_ORIGIN ?? "")
 
 if (configured.length > 0) {
   console.log("[cors] restricting to:", configured.join(", "));
+  // A rejected origin is otherwise invisible from the server side: the cors
+  // package simply omits the header, so the response is a normal 200 and only
+  // the browser complains. Nothing reaches the log, which makes a one-character
+  // typo in CORS_ORIGIN look like a broken deploy.
+  //
+  // Each distinct origin is reported once, and only so many, so a misdirected
+  // client or a scanner can't turn this into a flood.
+  const warned = new Set<string>();
   app.use(
     cors({
-      origin: (origin, cb) => cb(null, !origin || configured.includes(norm(origin))),
+      origin: (origin, cb) => {
+        const allowed = !origin || configured.includes(norm(origin));
+        if (!allowed && origin && !warned.has(origin) && warned.size < 50) {
+          warned.add(origin);
+          console.warn(
+            `[cors] blocked "${origin}" — not in CORS_ORIGIN (${configured.join(", ")}). ` +
+              `The browser will report a missing Access-Control-Allow-Origin header.`
+          );
+        }
+        return cb(null, allowed);
+      },
     })
   );
 } else {
