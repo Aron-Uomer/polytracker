@@ -26,3 +26,19 @@ export function resolvePlan(plan: Plan, proExpiresAt: Date | number | null | und
   const ms = proExpiresAt instanceof Date ? proExpiresAt.getTime() : proExpiresAt;
   return ms > Date.now() ? "pro" : "free";
 }
+
+/**
+ * The rows whose Pro has lapsed and whose stored `plan` is therefore stale.
+ *
+ * Lives here, beside `resolvePlan`, because the two must agree: this is the
+ * database-side spelling of the same rule, and the pair silently disagreeing
+ * is the only way the sweep could ever revoke access it shouldn't. Keeping it
+ * free of any database import also means it can be tested on its own.
+ *
+ * `proExpiresAt: null` is excluded deliberately. `resolvePlan` reads a missing
+ * expiry as Pro that never lapses, so sweeping those rows would not be
+ * correcting the record — it would be cancelling a plan.
+ */
+export function lapsedProFilter(now: Date = new Date()) {
+  return { plan: "pro", proExpiresAt: { not: null, lt: now } };
+}

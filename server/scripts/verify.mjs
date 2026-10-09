@@ -346,11 +346,44 @@ async function phasePositions() {
   }
 }
 
+/* ---------------------------------------------------------------- phase 7 */
+// The lapsed-plan filter. Imported from plans.js, which has no database
+// import — so this asserts the real rule without the risk of pulling dotenv
+// and a live DATABASE_URL into the test process.
+//
+// The assertion that matters is the row it REFUSES to match: a null expiry
+// means Pro that never lapses, and sweeping those would cancel a plan rather
+// than tidy the record.
+async function phaseExpiry() {
+  console.log("\n\x1b[1m7. Lapsed-plan sweep\x1b[0m");
+  const { lapsedProFilter, resolvePlan } = await import("../dist/plans.js");
+
+  const now = new Date("2026-06-15T12:00:00Z");
+  const f = lapsedProFilter(now);
+  check("matches only pro rows", f.plan === "pro");
+  check("never matches a null expiry", f.proExpiresAt.not === null, "proExpiresAt: { not: null, … }");
+  check("only expiries before now", f.proExpiresAt.lt === now);
+
+  // The filter and resolvePlan are two spellings of one rule. If they ever
+  // disagree the sweep writes `free` onto someone resolvePlan still calls pro.
+  //
+  // These use the real clock, not the fixed `now` above: resolvePlan reads
+  // Date.now() internally and takes no reference time, so comparing the two at
+  // an imaginary instant tests nothing (and fails for the wrong reason).
+  const past = new Date(Date.now() - 86400_000);
+  const future = new Date(Date.now() + 86400_000);
+  check("agrees with resolvePlan: lapsed is free", resolvePlan("pro", past) === "free");
+  check("agrees with resolvePlan: unexpired stays pro", resolvePlan("pro", future) === "pro");
+  check("agrees with resolvePlan: null expiry stays pro", resolvePlan("pro", null) === "pro");
+  check("free is never rewritten", resolvePlan("free", past) === "free" && f.plan !== "free");
+}
+
 await phaseDev();
 await phaseProd();
 await phaseSecret();
 await phaseDetail();
 await phasePositions();
+await phaseExpiry();
 
 const failed = results.filter((r) => !r.pass);
 console.log(

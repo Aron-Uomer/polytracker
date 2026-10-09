@@ -9,6 +9,7 @@ import { smartMoneyRouter } from "./routes/smartmoney.js";
 import { authRouter } from "./routes/auth.js";
 import { billingRouter } from "./routes/billing.js";
 import { rateLimit } from "./ratelimit.js";
+import { startExpirySweep } from "./expire.js";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -146,4 +147,8 @@ process.on("uncaughtException", (err) => {
 
 app.listen(PORT, () => {
   console.log(`Whole Record API listening on http://localhost:${PORT}`);
+  // Correct any Pro plans that lapsed while the process was down. Access was
+  // never affected — resolvePlan handles expiry on every read — but the stored
+  // column needs writing back so the table matches what the app enforces.
+  startExpirySweep();
 });
