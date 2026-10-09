@@ -14,3 +14,7 @@ coverage/
 # is hook cache and decision-page session state.
 .claude/
 .impeccable/
+
+# Promo video renders and their Hyperframes projects. Megabytes of MP4, PNG
+# and bundled audio that nothing in the app imports — regenerate with /brag.
+brag-output/
