@@ -31,8 +31,23 @@ export function tradeSince(iso: string | null): string {
   });
 }
 
+/**
+ * The gain/loss colours for every figure on the board.
+ *
+ * These were Tailwind's stock emerald-400 and rose-400 — the last two places
+ * in the app still using the default palette, and the reason the board's own
+ * `success`/`danger` were defined in the first place: the config notes the
+ * stock pair "read as generic and sit cold against the enamel".
+ *
+ * They were also the one pair that never re-lit with the theme, because a
+ * literal utility class cannot. On the light board emerald-400 measured
+ * 1.60:1 and rose-400 2.24:1 — both far under the 4.5:1 floor, which is why
+ * a win read as a bright smear rather than a number. The tokens below are
+ * measured in both lightings: 8.20:1 / 5.57:1 at night, 5.05:1 / 4.93:1 in
+ * daylight.
+ */
 export function pnlColor(n: number): string {
-  if (n > 0) return "text-emerald-400";
-  if (n < 0) return "text-rose-400";
+  if (n > 0) return "text-success";
+  if (n < 0) return "text-danger";
   return "text-slate-300";
 }

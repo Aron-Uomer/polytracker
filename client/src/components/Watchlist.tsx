@@ -195,7 +195,12 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
               </div>
               <button
                 onClick={onUpgrade}
-                className="rounded-lg bg-gradient-to-r from-premium to-amber-400 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:brightness-105"
+                /* Solid brass, not a gradient: the design contract bans
+                   gradients outright, and the stock amber this ramped into
+                   was the last default-palette colour in the app — it never
+                   re-lit with the theme, so in daylight the right-hand half
+                   stayed bright while the text went pale over it. */
+                className="rounded-lg bg-premium px-4 py-2 text-sm font-semibold text-board transition hover:brightness-105"
               >
                 Unlock with Pro
               </button>
