@@ -36,7 +36,7 @@ export function TrackButton({ address, tracked, onAdd, onNeedUpgrade, compact }:
     <button
       onClick={add}
       disabled={busy}
-      className={`inline-flex items-center gap-1 rounded-lg border border-white/10 text-slate-300 transition hover:border-brand hover:text-brand-light disabled:opacity-50 ${size}`}
+      className={`inline-flex items-center gap-1 rounded-lg border border-hair/10 text-slate-300 transition hover:border-brand hover:text-brand-light disabled:opacity-50 ${size}`}
     >
       <PlusIcon className="h-3.5 w-3.5" /> {busy ? "…" : "Track"}
     </button>

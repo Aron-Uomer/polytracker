@@ -25,7 +25,7 @@ export function Pager({
         <button
           onClick={() => onPage(Math.max(0, page - 1))}
           disabled={page === 0}
-          className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-400 transition hover:border-brand hover:text-brand-light disabled:cursor-not-allowed disabled:opacity-30"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-hair/10 text-slate-400 transition hover:border-brand hover:text-brand-light disabled:cursor-not-allowed disabled:opacity-30"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -35,7 +35,7 @@ export function Pager({
         <button
           onClick={() => onPage(Math.min(totalPages - 1, page + 1))}
           disabled={page >= totalPages - 1}
-          className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-400 transition hover:border-brand hover:text-brand-light disabled:cursor-not-allowed disabled:opacity-30"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-hair/10 text-slate-400 transition hover:border-brand hover:text-brand-light disabled:cursor-not-allowed disabled:opacity-30"
         >
           <ChevronRight className="h-4 w-4" />
         </button>

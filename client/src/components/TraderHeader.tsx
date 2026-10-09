@@ -15,10 +15,10 @@ export function TraderHeader({ stats }: { stats: HeaderStats }) {
         <img
           src={stats.profile.profileImage}
           alt=""
-          className="h-12 w-12 rounded-full object-cover ring-1 ring-white/10"
+          className="h-12 w-12 rounded-full object-cover ring-1 ring-hair/10"
         />
       ) : (
-        <div className="grid h-12 w-12 place-items-center rounded-full bg-ink-700 text-slate-400 ring-1 ring-white/10">
+        <div className="grid h-12 w-12 place-items-center rounded-full bg-ink-700 text-slate-400 ring-1 ring-hair/10">
           <UserIcon className="h-6 w-6" />
         </div>
       )}

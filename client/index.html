@@ -24,6 +24,30 @@
       crossorigin
     />
     <title>Whole Record: Polymarket Trader Stats</title>
+    <!--
+      Applied before first paint, so a visitor who chose daylight never sees
+      the dark board flash first. Dark is the absence of the attribute, which
+      is why this only ever has to add one — and why the default costs nothing.
+      Kept inline and tiny on purpose: a deferred module would run after paint,
+      which is the whole bug this avoids.
+    -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("wr_theme");
+          var light =
+            saved === "light" ||
+            (!saved &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: light)").matches);
+          if (light) {
+            document.documentElement.setAttribute("data-theme", "light");
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute("content", "#EFEADE");
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <!--

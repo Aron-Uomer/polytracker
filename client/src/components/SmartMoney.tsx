@@ -14,7 +14,7 @@ function OutcomePill({ outcome }: { outcome: string }) {
       ? "border-success/30 bg-success/10 text-success"
       : o === "no"
       ? "border-danger/30 bg-danger/10 text-danger"
-      : "border-white/10 bg-white/5 text-slate-300";
+      : "border-hair/10 bg-hair/5 text-slate-300";
   // On sports markets the outcome is a player or team name, which can be
   // longer than the market title. Cap and ellipsize it rather than letting it
   // push into the figures column.
@@ -155,7 +155,7 @@ function Seg({
             key={v}
             onClick={() => onChange(v)}
             className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-              value === v ? "bg-white/10 text-slate-100" : "text-slate-400 hover:text-slate-200"
+              value === v ? "bg-hair/10 text-slate-100" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             {lbl}

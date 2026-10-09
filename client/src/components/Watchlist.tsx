@@ -66,7 +66,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                   isFree
-                    ? "bg-white/5 text-slate-300"
+                    ? "bg-hair/5 text-slate-300"
                     : "bg-premium/15 text-premium ring-1 ring-premium/30"
                 }`}
               >
@@ -78,7 +78,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
                 <span className="text-muted"> / {state.limit}</span>
               </span>
             </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-hair/10">
               <div
                 className={`h-full rounded-full transition-all ${atLimit ? "bg-danger" : "gradient-cta"}`}
                 style={{ width: `${pctUsed}%` }}
@@ -104,7 +104,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
               placeholder="0x… wallet address to track"
               spellCheck={false}
               disabled={atLimit}
-              className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm outline-none transition focus:border-brand disabled:opacity-50"
+              className="flex-1 rounded-xl border border-hair/10 bg-hair/5 px-4 py-3 font-mono text-sm outline-none transition focus:border-brand disabled:opacity-50"
             />
             <button
               type="submit"
@@ -118,7 +118,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
         </>
       ) : (
         <div className="glass mt-6 flex flex-col items-center gap-4 rounded-2xl px-6 py-10 text-center">
-          <span className="grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-brand-light">
+          <span className="grid h-11 w-11 place-items-center rounded-xl border border-hair/10 bg-hair/[0.04] text-brand-light">
             <StarIcon className="h-5 w-5" />
           </span>
           <div>
@@ -143,7 +143,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
       {isFree && (atLimit || error) && (
         <div className="glass mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl p-4">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 text-premium">
+            <span className="grid h-10 w-10 place-items-center rounded-lg border border-hair/10 text-premium">
               <CrownIcon className="h-5 w-5" />
             </span>
             <div>
@@ -157,7 +157,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
           </div>
           <button
             onClick={onUpgrade}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-5 py-2.5 font-semibold text-ink-950 transition hover:bg-slate-200"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-bone px-5 py-2.5 font-semibold text-board transition hover:bg-lamp"
           >
             <CrownIcon className="h-4 w-4" /> Upgrade to Pro
           </button>
@@ -169,7 +169,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
         <p className="mt-10 text-center text-sm text-muted">Loading…</p>
       ) : state.entries.length === 0 ? (
         <div className="glass mt-8 rounded-2xl py-16 text-center">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-muted">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-hair/5 text-muted">
             <StarIcon className="h-6 w-6" />
           </div>
           <p className="mt-3 text-sm text-slate-400">
@@ -181,7 +181,7 @@ export function Watchlist({ state, signedIn, onSignIn, onAdd, onRemove, onUpgrad
           {lockedCount > 0 && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-premium/30 bg-premium/[0.06] p-4">
               <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 text-premium">
+                <span className="grid h-10 w-10 place-items-center rounded-lg border border-hair/10 text-premium">
                   <CrownIcon className="h-5 w-5" />
                 </span>
                 <div>
@@ -245,7 +245,7 @@ function LockedCard({ entry, onRemove }: { entry: WatchEntry; onRemove: () => vo
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-6 rounded bg-white/5" />
+            <div key={i} className="h-6 rounded bg-hair/5" />
           ))}
         </div>
       </div>
@@ -256,7 +256,7 @@ function LockedCard({ entry, onRemove }: { entry: WatchEntry; onRemove: () => vo
       </div>
       <button
         onClick={onRemove}
-        className="absolute right-2 top-2 z-10 rounded-md p-1 text-muted transition hover:bg-white/5 hover:text-danger"
+        className="absolute right-2 top-2 z-10 rounded-md p-1 text-muted transition hover:bg-hair/5 hover:text-danger"
         title="Remove"
       >
         <XIcon className="h-4 w-4" />
@@ -298,10 +298,10 @@ function SummaryCard({
             <img
               src={data.profile.profileImage}
               alt=""
-              className="h-9 w-9 rounded-full object-cover ring-1 ring-white/10"
+              className="h-9 w-9 rounded-full object-cover ring-1 ring-hair/10"
             />
           ) : (
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-ink-700 text-muted ring-1 ring-white/10">
+            <div className="grid h-9 w-9 place-items-center rounded-full bg-ink-700 text-muted ring-1 ring-hair/10">
               <UserIcon className="h-4 w-4" />
             </div>
           )}
@@ -315,7 +315,7 @@ function SummaryCard({
             ev.stopPropagation();
             onRemove();
           }}
-          className="rounded-md p-1 text-muted opacity-0 transition hover:bg-white/5 hover:text-danger group-hover:opacity-100"
+          className="rounded-md p-1 text-muted opacity-0 transition hover:bg-hair/5 hover:text-danger group-hover:opacity-100"
           title="Remove"
         >
           <XIcon className="h-4 w-4" />

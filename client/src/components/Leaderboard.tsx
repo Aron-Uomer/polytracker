@@ -105,7 +105,7 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter by name…"
-          className="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-brand"
+          className="w-full rounded-lg border border-hair/10 bg-hair/5 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-brand"
         />
       </div>
 
@@ -120,7 +120,7 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
       <div className="glass mt-6 overflow-x-auto rounded-2xl">
         <table className="w-full min-w-[22rem] text-sm">
           <thead>
-            <tr className="border-b border-white/[0.06] text-left text-[11px] uppercase tracking-wider text-muted">
+            <tr className="border-b border-hair/[0.06] text-left text-[11px] uppercase tracking-wider text-muted">
               <th className="py-3 pl-5 pr-2 font-medium">#</th>
               <th className="py-3 px-2 font-medium">Trader</th>
               <th className="hidden py-3 px-2 font-medium sm:table-cell">Wallet</th>
@@ -134,7 +134,7 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
           <tbody>
             {loading
               ? Array.from({ length: PAGE_SIZE }).map((_, i) => (
-                  <tr key={i} className="border-t border-white/[0.04]">
+                  <tr key={i} className="border-t border-hair/[0.04]">
                     <td colSpan={5} className="px-5 py-4">
                       <div className="shimmer h-4 w-full rounded" />
                     </td>
@@ -144,7 +144,7 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
                   <tr
                     key={r.address}
                     onClick={() => onSelect(r.address)}
-                    className="group cursor-pointer border-t border-white/[0.05] transition hover:bg-white/[0.04]"
+                    className="group cursor-pointer border-t border-hair/[0.05] transition hover:bg-hair/[0.04]"
                   >
                     <td className="py-2.5 pl-5 pr-2">
                       <RankBadge rank={r.rank} />
@@ -155,10 +155,10 @@ export function Leaderboard({ onSelect, onAdd, isTracked, onNeedUpgrade }: Props
                           <img
                             src={r.profileImage}
                             alt=""
-                            className="h-8 w-8 rounded-full object-cover ring-1 ring-white/10"
+                            className="h-8 w-8 rounded-full object-cover ring-1 ring-hair/10"
                           />
                         ) : (
-                          <div className="grid h-8 w-8 place-items-center rounded-full bg-ink-700 text-muted ring-1 ring-white/10">
+                          <div className="grid h-8 w-8 place-items-center rounded-full bg-ink-700 text-muted ring-1 ring-hair/10">
                             <UserIcon className="h-4 w-4" />
                           </div>
                         )}

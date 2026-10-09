@@ -143,3 +143,20 @@ export const ChevronRight = ({ className }: P) => (
     <path d="m9 6 6 6-6 6" />
   </svg>
 );
+
+/* A lit filament and an unlit one — the board's own metaphor for the two
+   lightings, rather than the usual sun and crescent moon. */
+export const LampOnIcon = ({ className }: P) => (
+  <svg {...base(className)}>
+    <path d="M9 18h6M10 21h4" />
+    <path d="M12 3a6 6 0 0 0-3.5 10.9V15h7v-1.1A6 6 0 0 0 12 3Z" />
+  </svg>
+);
+
+export const LampOffIcon = ({ className }: P) => (
+  <svg {...base(className)}>
+    <path d="M9 18h6M10 21h4" />
+    <path d="M12 3a6 6 0 0 0-3.5 10.9V15h7v-1.1A6 6 0 0 0 12 3Z" />
+    <path d="M4 4l16 16" />
+  </svg>
+);

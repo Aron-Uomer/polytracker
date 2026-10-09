@@ -22,7 +22,7 @@ function OutcomePill({ outcome }: { outcome: string }) {
       ? "border-success/30 bg-success/10 text-success"
       : o === "no"
       ? "border-danger/30 bg-danger/10 text-danger"
-      : "border-white/10 bg-white/5 text-slate-300";
+      : "border-hair/10 bg-hair/5 text-slate-300";
   return (
     <span className={`rounded-md border px-1.5 py-0.5 text-xs font-medium ${cls}`}>
       {outcome || "–"}
@@ -90,7 +90,7 @@ export function PositionsTable({
             {paged.map((p) => (
               <tr
                 key={p.conditionId + p.outcome}
-                className="border-t border-white/[0.05] transition hover:bg-white/[0.03]"
+                className="border-t border-hair/[0.05] transition hover:bg-hair/[0.03]"
               >
                 <td className="whitespace-nowrap py-3 pr-3 font-mono text-xs text-slate-400">
                   {shortDay(p.firstTradeAt)}

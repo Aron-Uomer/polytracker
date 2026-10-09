@@ -19,7 +19,7 @@ export function ProGate({
     <section className="animate-fadeUp grid place-items-center py-20 sm:py-28">
       <div className="glass w-full max-w-md rounded-2xl p-8 text-center">
         <span className="text-xs uppercase tracking-[0.2em] text-muted">Pro feature</span>
-        <div className="mx-auto mt-4 grid h-11 w-11 place-items-center rounded-xl border border-white/10 text-premium">
+        <div className="mx-auto mt-4 grid h-11 w-11 place-items-center rounded-xl border border-hair/10 text-premium">
           <CrownIcon className="h-5 w-5" />
         </div>
         <h1 className="mt-4 text-2xl font-semibold tracking-tight">{title}</h1>

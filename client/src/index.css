@@ -29,20 +29,134 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- The two lightings -------------------------------------------------
+   The board is one object under two lights. Dark is the board at night, lit
+   by its own lamps — the designed default, so it lives on :root and needs no
+   class to apply (a themed class on :root would flash the wrong palette
+   before the class lands). Light is the same board in daylight: the enamel
+   reads as warm paper, the ink is the chassis colour, the lamps are unlit and
+   therefore dark, and the flip-tiles turn over — bone letters on a dark face
+   instead of dark letters on a bone one. Real split-flap boards come in both
+   polarities; on a bone ground, bone tiles would simply disappear.
+
+   Values are space-separated RGB channels, not hex, so Tailwind can still
+   inject an alpha: `bg-lamp/10` compiles to rgb(var(--lamp) / 0.1). Every
+   token flips here, which is why no component file needs a `dark:` variant —
+   there are none in the codebase and this keeps it that way.
+
+   Light-mode contrast is measured against the light chassis (#EFEADE), in
+   Node, same as the dark figures in tailwind.config.js. */
 :root {
   color-scheme: dark;
+
+  --board-void: 13 14 9;
+  --board: 20 21 15;
+  --board-rail: 28 30 21;
+  --board-slot: 38 41 32;
+  --board-rule: 51 55 43;
+  --board-rule-hover: 74 80 64;
+
+  --lamp: 242 178 51; /*  9.78:1 */
+  --lamp-hot: 255 211 122;
+  --lamp-dark: 184 128 30;
+  --lamp-dim: 122 92 31; /* unlit element — decorative only, never text */
+  --lamp-bloom: 0.35; /* the glass envelope around a lit filament */
+
+  --bone: 232 227 214; /* 14.33:1 */
+  --bone-dim: 154 147 132; /*  6.02:1 */
+
+  --success: 111 191 115; /*  8.20:1 */
+  --danger: 224 106 87; /*  5.57:1 */
+  --premium: 217 164 65;
+
+  /* Translucent films laid over the ground: light on a dark board. Replaces
+     the literal `white/10` the interior used, which inverts into an invisible
+     white-on-white film the moment the ground turns pale. */
+  --hair: 232 227 214;
+  --veil: 0 0 0; /* the colour shadows are cast in */
+
+  /* The flip-tile face, and the ink printed on it. */
+  --tile-top: 239 234 222;
+  --tile-bottom: 226 221 208;
+  --tile-ink: 20 21 15;
+
+  --slate-100: 242 238 227;
+  --slate-200: 232 227 214;
+  --slate-300: 207 201 185;
+  --slate-400: 154 147 132;
+  --slate-500: 122 116 102;
+  --slate-600: 92 87 73;
+  --slate-700: 64 60 49;
+  --slate-800: 42 42 33;
+  --slate-900: 28 30 21;
+  --slate-950: 20 21 15;
+
+  --ink-950: 13 14 9;
+  --ink-900: 20 21 15;
+  --ink-800: 28 30 21;
+  --ink-700: 38 41 32;
+  --ink-600: 51 55 43;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --board-void: 220 214 198;
+  --board: 239 234 222;
+  --board-rail: 228 222 207;
+  --board-slot: 220 213 195;
+  --board-rule: 189 180 160;
+  --board-rule-hover: 160 150 128;
+
+  --lamp: 122 82 10; /*  5.76:1 — an unlit filament reads dark, not amber */
+  --lamp-hot: 154 107 16;
+  --lamp-dark: 90 60 8;
+  --lamp-dim: 201 185 143;
+  --lamp-bloom: 0; /* nothing is lit, so nothing blooms */
+
+  --bone: 20 21 15; /* 15.29:1 — "bone" now means ink */
+  --bone-dim: 90 85 71; /*  6.19:1 */
+
+  --success: 42 112 52; /*  5.05:1 */
+  --danger: 178 59 38; /*  4.93:1 */
+  --premium: 125 90 14; /*  5.24:1 */
+
+  --hair: 20 21 15; /* films darken the ground instead of lifting it */
+  --veil: 64 58 40;
+
+  /* The tiles turn over. */
+  --tile-top: 32 34 24;
+  --tile-bottom: 20 21 15;
+  --tile-ink: 239 234 222;
+
+  --slate-100: 20 21 15;
+  --slate-200: 28 30 21;
+  --slate-300: 51 55 43;
+  --slate-400: 90 85 71;
+  --slate-500: 122 116 102;
+  --slate-600: 154 147 132;
+  --slate-700: 207 201 185;
+  --slate-800: 224 218 203;
+  --slate-900: 232 227 214;
+  --slate-950: 242 238 227;
+
+  --ink-950: 220 214 198;
+  --ink-900: 239 234 222;
+  --ink-800: 228 222 207;
+  --ink-700: 220 213 195;
+  --ink-600: 189 180 160;
 }
 
 html {
   scroll-behavior: smooth;
-  background: #0d0e09;
+  background: rgb(var(--board-void));
 }
 
 body {
   margin: 0;
   font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
-  background: #0d0e09;
-  color: #e8e3d6;
+  background: rgb(var(--board-void));
+  color: rgb(var(--bone));
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -69,7 +183,7 @@ body {
   button:focus-visible,
   input:focus-visible,
   [tabindex]:focus-visible {
-    outline: 2px solid rgba(242, 178, 51, 0.9);
+    outline: 2px solid rgb(var(--lamp) / 0.9);
     outline-offset: 2px;
     border-radius: 2px;
   }
@@ -81,10 +195,10 @@ body {
      lamps it carries. The gradient here is that light source, not decoration:
      remove it and the chassis reads as a flat div again. */
   .chassis {
-    background-color: #14150f;
+    background-color: rgb(var(--board));
     background-image: repeating-linear-gradient(
       90deg,
-      rgba(232, 227, 214, 0.016) 0 1px,
+      rgb(var(--hair) / 0.016) 0 1px,
       transparent 1px 5px
     );
   }
@@ -98,34 +212,38 @@ body {
     pointer-events: none;
     background: radial-gradient(
       120% 70% at 50% -10%,
-      rgba(242, 178, 51, 0.09),
+      rgb(var(--lamp) / 0.09),
       transparent 62%
     );
   }
 
   /* A rail sits proud of the chassis; a slot is milled into it. */
   .rail {
-    background: #1c1e15;
-    box-shadow: 0 1px 0 rgba(232, 227, 214, 0.05) inset,
-      0 6px 20px -12px rgba(0, 0, 0, 0.9);
+    background: rgb(var(--board-rail));
+    box-shadow: 0 1px 0 rgb(var(--hair) / 0.05) inset,
+      0 6px 20px -12px rgb(var(--veil) / 0.9);
   }
   .slot {
-    background: #262920;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55) inset,
-      0 -1px 0 rgba(232, 227, 214, 0.04) inset;
+    background: rgb(var(--board-slot));
+    box-shadow: 0 2px 6px rgb(var(--veil) / 0.55) inset,
+      0 -1px 0 rgb(var(--hair) / 0.04) inset;
   }
 
   /* Painted hairline. One weight, everywhere. */
   .rule {
-    border-color: #33372b;
+    border-color: rgb(var(--board-rule));
   }
 
   /* A bone flip-tile. Square, machined, with the seam a real split-flap has. */
   .tile {
-    background: linear-gradient(180deg, #efeade 0 50%, #e2ddd0 50% 100%);
-    color: #14150f;
-    box-shadow: 0 1px 0 rgba(232, 227, 214, 0.06) inset,
-      0 2px 8px -4px rgba(0, 0, 0, 0.8);
+    background: linear-gradient(
+      180deg,
+      rgb(var(--tile-top)) 0 50%,
+      rgb(var(--tile-bottom)) 50% 100%
+    );
+    color: rgb(var(--tile-ink));
+    box-shadow: 0 1px 0 rgb(var(--hair) / 0.06) inset,
+      0 2px 8px -4px rgb(var(--veil) / 0.8);
   }
   .tile::after {
     content: "";
@@ -134,14 +252,14 @@ body {
     right: 0;
     top: 50%;
     height: 1px;
-    background: rgba(20, 21, 15, 0.22);
+    background: rgb(var(--tile-ink) / 0.22);
   }
 
   /* Lamp text: a filament printing a value onto the board. The bloom is the
      glass envelope, kept tight enough to stay legible. */
   .lamp-text {
-    color: #f2b233;
-    text-shadow: 0 0 18px rgba(242, 178, 51, 0.35);
+    color: rgb(var(--lamp));
+    text-shadow: 0 0 18px rgb(var(--lamp) / var(--lamp-bloom));
   }
 
   /* ---- Compatibility ---------------------------------------------------
@@ -149,53 +267,55 @@ body {
      a recessed panel in the chassis. Keeping the class name lets the whole
      app inherit the world in one move rather than in thirteen files. */
   .glass {
-    background: rgba(232, 227, 214, 0.022);
-    border: 1px solid #33372b;
+    background: rgb(var(--hair) / 0.022);
+    border: 1px solid rgb(var(--board-rule));
   }
   .glass-hover {
     transition: border-color 0.15s ease, background-color 0.15s ease;
   }
   .glass-hover:hover {
-    border-color: #4a5040;
-    background: rgba(232, 227, 214, 0.04);
+    border-color: rgb(var(--board-rule-hover));
+    background: rgb(var(--hair) / 0.04);
   }
   /* Historical names, now solid. Kept so existing markup inherits the world. */
   .gradient-text {
-    color: #f2b233;
+    color: rgb(var(--lamp));
   }
   .gradient-cta {
-    background: #f2b233;
-    color: #14150f;
+    background: rgb(var(--lamp));
+    /* --board is the ground the lamp is painted on, so it is always the
+       correct opposite of --lamp in either lighting. */
+    color: rgb(var(--board));
     transition: background-color 0.15s ease;
   }
   .gradient-cta:hover {
-    background: #ffd37a;
+    background: rgb(var(--lamp-hot));
   }
 
   .input {
     width: 100%;
     border-radius: 2px;
-    border: 1px solid #33372b;
-    background: #262920;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55) inset;
+    border: 1px solid rgb(var(--board-rule));
+    background: rgb(var(--board-slot));
+    box-shadow: 0 2px 6px rgb(var(--veil) / 0.55) inset;
     padding: 0.625rem 0.875rem;
     font-size: 0.875rem;
-    color: #e8e3d6;
+    color: rgb(var(--bone));
     outline: none;
     transition: border-color 0.15s ease;
   }
   .input:focus {
-    border-color: #f2b233;
+    border-color: rgb(var(--lamp));
   }
   .input::placeholder {
-    color: #9a9384;
+    color: rgb(var(--bone-dim));
   }
 
   .shimmer {
     position: relative;
     overflow: hidden;
-    background: rgba(232, 227, 214, 0.03);
-    border: 1px solid #33372b;
+    background: rgb(var(--hair) / 0.03);
+    border: 1px solid rgb(var(--board-rule));
   }
   .shimmer::after {
     content: "";
@@ -205,7 +325,7 @@ body {
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(242, 178, 51, 0.09),
+      rgb(var(--lamp) / 0.09),
       transparent
     );
     animation: shimmer 1.6s infinite;
@@ -234,21 +354,21 @@ body {
 }
 
 ::selection {
-  background: rgba(242, 178, 51, 0.28);
+  background: rgb(var(--lamp) / 0.28);
 }
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #0d0e09;
+  background: rgb(var(--board-void));
 }
 ::-webkit-scrollbar-thumb {
-  background: #33372b;
+  background: rgb(var(--board-rule));
   border-radius: 0;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #4a5040;
+  background: rgb(var(--board-rule-hover));
 }
 
 @media (prefers-reduced-motion: reduce) {

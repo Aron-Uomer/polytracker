@@ -69,7 +69,7 @@ export function Compare({
           onKeyDown={(e) => e.key === "Enter" && add(input)}
           placeholder="0x… wallet address"
           spellCheck={false}
-          className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm outline-none transition focus:border-brand"
+          className="flex-1 rounded-xl border border-hair/10 bg-hair/5 px-4 py-3 font-mono text-sm outline-none transition focus:border-brand"
         />
         <button
           onClick={() => add(input)}
@@ -86,7 +86,7 @@ export function Compare({
             <button
               key={w.address}
               onClick={() => add(w.address)}
-              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-300 transition hover:border-brand hover:text-brand-light"
+              className="rounded-full border border-hair/10 bg-hair/5 px-3 py-1 text-slate-300 transition hover:border-brand hover:text-brand-light"
             >
               {w.label || shortAddr(w.address)}
             </button>
@@ -111,9 +111,9 @@ export function Compare({
                     </button>
                     <div className="flex cursor-pointer flex-col items-center gap-1.5" onClick={() => onSelect(a)}>
                       {data[a]?.profile.profileImage ? (
-                        <img src={data[a]!.profile.profileImage!} alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-white/10" />
+                        <img src={data[a]!.profile.profileImage!} alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-hair/10" />
                       ) : (
-                        <span className="grid h-10 w-10 place-items-center rounded-full bg-ink-700 text-muted ring-1 ring-white/10">
+                        <span className="grid h-10 w-10 place-items-center rounded-full bg-ink-700 text-muted ring-1 ring-hair/10">
                           <UserIcon className="h-5 w-5" />
                         </span>
                       )}
@@ -130,7 +130,7 @@ export function Compare({
                 const vals = addrs.map((a) => (data[a] ? row.get(data[a]!) : null));
                 const best = Math.max(...vals.filter((v): v is number => v !== null), -Infinity);
                 return (
-                  <tr key={row.label} className="border-t border-white/[0.06]">
+                  <tr key={row.label} className="border-t border-hair/[0.06]">
                     <td className="py-3 pr-3 text-xs uppercase tracking-wider text-muted">{row.label}</td>
                     {addrs.map((a, i) => {
                       const v = vals[i];

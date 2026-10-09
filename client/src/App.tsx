@@ -50,6 +50,7 @@ import {
   XIcon,
 } from "./components/icons";
 import { SplitFlap, BoardRow } from "./components/Board";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { initAnalytics, pageview, track } from "./analytics";
 
 /**
@@ -435,6 +436,9 @@ export default function App() {
               <NavLink icon={<StarIcon className="h-4 w-4" />} label="My Traders" active={route === "watchlist"} onClick={() => navTo("watchlist")} badge={watch && watch.count > 0 ? watch.count : undefined} />
             </nav>
             <span className="mx-1 hidden h-5 w-px bg-board-rule sm:block" />
+            {/* Sits in the rail at every width — the lighting is not a setting
+                worth burying in the phone menu. */}
+            <ThemeToggle />
             <AccountControl user={user} onSignIn={() => setAuthOpen(true)} onSignOut={signOut} />
             <button
               type="button"
@@ -575,7 +579,7 @@ export default function App() {
                     <button
                       onClick={() => lookup(stats.address, true)}
                       disabled={loading}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-300 transition hover:border-brand hover:text-brand-light disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-hair/10 px-3 py-1.5 text-xs text-slate-300 transition hover:border-brand hover:text-brand-light disabled:opacity-50"
                     >
                       <RefreshIcon className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
                     </button>
@@ -960,7 +964,7 @@ function TabButton({
     <button
       onClick={onClick}
       className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-        active ? "bg-white/10 text-slate-100" : "text-slate-400 hover:text-slate-200"
+        active ? "bg-hair/10 text-slate-100" : "text-slate-400 hover:text-slate-200"
       }`}
     >
       {children}

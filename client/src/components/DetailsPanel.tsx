@@ -11,7 +11,7 @@ function Cell({
   valueClass?: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 transition hover:border-white/15">
+    <div className="rounded-xl border border-hair/[0.06] bg-hair/[0.02] px-3 py-2.5 transition hover:border-hair/15">
       <div className="text-[10px] font-medium uppercase tracking-wider text-muted">
         {label}
       </div>

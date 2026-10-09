@@ -5,12 +5,17 @@ import { ChevronLeft, ChevronRight } from "./icons";
 
 /* ------------------------- Monthly activity calendar ----------------------- */
 
+/* Heat in the board's own amber. These were indigo — a leftover from before
+   the Tote Board, and the one place on the page that still looked like a
+   different product. Driving them through --lamp also means they re-light
+   with the theme instead of staying a fixed film that vanishes on a pale
+   ground. */
 const TONE = [
-  "rgba(255,255,255,0.04)",
-  "rgba(129,140,248,0.25)",
-  "rgba(129,140,248,0.45)",
-  "rgba(129,140,248,0.7)",
-  "rgba(129,140,248,0.95)",
+  "rgb(var(--hair) / 0.05)",
+  "rgb(var(--lamp) / 0.22)",
+  "rgb(var(--lamp) / 0.42)",
+  "rgb(var(--lamp) / 0.68)",
+  "rgb(var(--lamp) / 0.95)",
 ];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -123,14 +128,21 @@ export function ActivityCalendar({
             const day = i + 1;
             const date = `${monthKey}-${String(day).padStart(2, "0")}`;
             const vol = volByDate.get(date) ?? 0;
+            const heat = intensity(vol);
+            // The day number sits on top of the heat, so it has to flip with
+            // it: on the two hottest steps the cell is near-solid lamp and
+            // needs the board colour, which is dark under one lighting and
+            // pale under the other. Anything less and the number is unreadable
+            // on exactly the days that matter most.
+            const dayInk = heat === 0 ? "text-muted" : heat >= 3 ? "text-board" : "text-bone";
             return (
               <div
                 key={date}
                 title={`${date}: ${vol > 0 ? usd(vol) + " volume" : "no trades"}`}
                 className="relative aspect-square rounded-md text-[11px]"
-                style={{ background: TONE[intensity(vol)] }}
+                style={{ background: TONE[heat] }}
               >
-                <span className={`absolute right-1 top-0.5 ${vol > 0 ? "text-white/80" : "text-muted"}`}>
+                <span className={`absolute right-1 top-0.5 ${dayInk}`}>
                   {day}
                 </span>
               </div>
@@ -209,7 +221,7 @@ function NavBtn({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="grid h-7 w-7 place-items-center rounded-lg border border-white/10 text-slate-400 transition hover:border-brand hover:text-brand-light disabled:cursor-not-allowed disabled:opacity-30"
+      className="grid h-7 w-7 place-items-center rounded-lg border border-hair/10 text-slate-400 transition hover:border-brand hover:text-brand-light disabled:cursor-not-allowed disabled:opacity-30"
     >
       {children}
     </button>

@@ -1,5 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 
+// Resolve a colour through its CSS variable while leaving Tailwind's alpha
+// modifier intact. The variable holds space-separated RGB channels, so
+// `bg-board/80` becomes rgb(var(--board) / 0.8).
+const c = (name) => `rgb(var(${name}) / <alpha-value>)`;
+
 // THE TOTE BOARD (seed d086c314)
 // An enamelled steel chassis read under lamplight. Four roles own whole
 // regions of the page, not accents scattered on neutral: the board itself,
@@ -26,74 +31,79 @@ export default {
         data: ['"Archivo"', "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
-        // --- The board itself -------------------------------------------
-        // Warm-olive enamel over steel. Never blue-black; a blue ground
-        // turns the amber green and the whole thing reads as a UI again.
+        // Every token resolves through a CSS variable defined in index.css,
+        // where the dark and light palettes live. The channel syntax is what
+        // keeps Tailwind's alpha modifiers working: `bg-lamp/10` still
+        // compiles, it just reads the current lighting. Contrast figures for
+        // both lightings are recorded beside the variables, measured in Node.
         board: {
-          void: "#0D0E09", // behind the board — the dark of the concourse
-          DEFAULT: "#14150F", // the chassis face
-          rail: "#1C1E15", // raised header and footer rails
-          slot: "#262920", // recessed wells (inputs, row troughs)
-          rule: "#33372B", // painted hairline
+          void: c("--board-void"),
+          DEFAULT: c("--board"),
+          rail: c("--board-rail"),
+          slot: c("--board-slot"),
+          rule: c("--board-rule"),
         },
-        // --- The lamps ---------------------------------------------------
         lamp: {
-          DEFAULT: "#F2B233", // lit filament            9.78:1
-          hot: "#FFD37A", // bloom on the active row
-          dim: "#7A5C1F", // unlit element — decorative only, never text
+          DEFAULT: c("--lamp"),
+          hot: c("--lamp-hot"),
+          dim: c("--lamp-dim"),
         },
-        // --- The tiles ---------------------------------------------------
-        bone: {
-          DEFAULT: "#E8E3D6", // tile face, primary text  14.33:1
-          dim: "#9A9384", // secondary text            6.02:1
-        },
-        // --- Signals -----------------------------------------------------
-        // Retuned off Tailwind's default emerald/red, which read as generic
-        // and sit cold against the enamel.
-        success: "#6FBF73", // gains                     8.20:1
-        danger: "#E06A57", // losses                    5.57:1
-        premium: "#D9A441", // Pro tier — brass, not gold-plated
+        bone: { DEFAULT: c("--bone"), dim: c("--bone-dim") },
+        success: c("--success"),
+        danger: c("--danger"),
+        premium: c("--premium"),
+        // A translucent film over the ground. The interior used literal
+        // `white/10` for this, which is correct on a dark board and invisible
+        // on a pale one; `hair` is whichever of the two the lighting needs.
+        hair: c("--hair"),
         // `brand` stays the token name so 60-odd existing usages inherit the
-        // world instead of needing a rename; it now means "lamp".
+        // world instead of needing a rename; it still means "lamp".
         brand: {
-          DEFAULT: "#F2B233",
-          dark: "#B8801E",
-          light: "#FFD37A",
+          DEFAULT: c("--lamp"),
+          dark: c("--lamp-dark"),
+          light: c("--lamp-hot"),
         },
-        accent: "#F2B233",
-        muted: "#9A9384", // 6.02:1 — was #74808f at 4.93:1
-        // Tailwind's stock `slate` is a cool blue-grey and fights the enamel
-        // everywhere it appears. Overriding the scale warms the entire
-        // interior — tables, charts, panels — without editing those files.
+        accent: c("--lamp"),
+        muted: c("--bone-dim"),
+        // Tailwind's stock `slate` is a cool blue-grey that fights the enamel.
+        // Overriding the scale warms the whole interior; the light palette
+        // also mirrors it end for end, so `text-slate-200` stays legible
+        // rather than turning into pale-on-pale.
         slate: {
-          100: "#F2EEE3",
-          200: "#E8E3D6", // 14.33:1
-          300: "#CFC9B9", // 11.11:1
-          400: "#9A9384", //  6.02:1
-          500: "#7A7466",
-          600: "#5C5749",
-          700: "#403C31",
-          800: "#2A2A21",
-          900: "#1C1E15",
-          950: "#14150F",
+          100: c("--slate-100"),
+          200: c("--slate-200"),
+          300: c("--slate-300"),
+          400: c("--slate-400"),
+          500: c("--slate-500"),
+          600: c("--slate-600"),
+          700: c("--slate-700"),
+          800: c("--slate-800"),
+          900: c("--slate-900"),
+          950: c("--slate-950"),
         },
         ink: {
-          950: "#0D0E09",
-          900: "#14150F",
-          800: "#1C1E15",
-          700: "#262920",
-          600: "#33372B",
+          950: c("--ink-950"),
+          900: c("--ink-900"),
+          800: c("--ink-800"),
+          700: c("--ink-700"),
+          600: c("--ink-600"),
         },
       },
+      // Tailwind's preflight sets every element's border-color to its own
+      // #e5e7eb grey. It is inert while border-width is 0, but the moment
+      // anyone writes a bare `border` they get a stock light grey that belongs
+      // to neither lighting. Pointing the default at the painted hairline
+      // makes the accident harmless.
+      borderColor: { DEFAULT: c("--board-rule") },
       boxShadow: {
         // Enamel has real depth. Rails sit proud of the chassis; slots are
         // milled into it. Both carry an offset and a soft blur.
-        rail: "0 1px 0 rgba(232,227,214,0.05) inset, 0 6px 20px -12px rgba(0,0,0,0.9)",
-        slot: "0 2px 6px rgba(0,0,0,0.55) inset, 0 -1px 0 rgba(232,227,214,0.04) inset",
-        tile: "0 1px 0 rgba(232,227,214,0.06) inset, 0 2px 8px -4px rgba(0,0,0,0.8)",
-        lamp: "0 0 24px -6px rgba(242,178,51,0.45)",
-        soft: "0 1px 2px rgba(0,0,0,0.35)",
-        elevated: "0 6px 20px -10px rgba(0,0,0,0.75)",
+        rail: "0 1px 0 rgb(var(--hair) / 0.05) inset, 0 6px 20px -12px rgb(var(--veil) / 0.9)",
+        slot: "0 2px 6px rgb(var(--veil) / 0.55) inset, 0 -1px 0 rgb(var(--hair) / 0.04) inset",
+        tile: "0 1px 0 rgb(var(--hair) / 0.06) inset, 0 2px 8px -4px rgb(var(--veil) / 0.8)",
+        lamp: "0 0 24px -6px rgb(var(--lamp) / 0.45)",
+        soft: "0 1px 2px rgb(var(--veil) / 0.35)",
+        elevated: "0 6px 20px -10px rgb(var(--veil) / 0.75)",
         glow: "none",
       },
       borderRadius: {

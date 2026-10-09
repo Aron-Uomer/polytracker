@@ -55,7 +55,7 @@ export function AuthModal({
       >
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-lg border border-white/15 bg-white/5">
+            <span className="grid h-7 w-7 place-items-center rounded-lg border border-hair/15 bg-hair/5">
               <BoltIcon className="h-4 w-4 text-brand-light" />
             </span>
             <span className="text-[15px] font-semibold">
@@ -73,14 +73,14 @@ export function AuthModal({
               <GoogleButton onAuthed={onAuthed} onError={setError} />
             </div>
             <div className="mb-4 flex items-center gap-3 text-xs text-muted">
-              <span className="h-px flex-1 bg-white/10" />
+              <span className="h-px flex-1 bg-hair/10" />
               or
-              <span className="h-px flex-1 bg-white/10" />
+              <span className="h-px flex-1 bg-hair/10" />
             </div>
           </>
         )}
 
-        <div className="mb-4 flex rounded-lg border border-white/10 bg-white/5 p-0.5 text-sm">
+        <div className="mb-4 flex rounded-lg border border-hair/10 bg-hair/5 p-0.5 text-sm">
           {(["signin", "signup"] as const).map((t) => (
             <button
               key={t}
@@ -89,7 +89,7 @@ export function AuthModal({
                 setError(null);
               }}
               className={`flex-1 rounded-md py-1.5 transition ${
-                tab === t ? "bg-white/10 text-slate-100" : "text-slate-400 hover:text-slate-200"
+                tab === t ? "bg-hair/10 text-slate-100" : "text-slate-400 hover:text-slate-200"
               }`}
             >
               {t === "signin" ? "Sign in" : "Sign up"}
